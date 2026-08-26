@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Star, CollectionTag } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { addComment, getCommentTree } from '@/api/comment'
 import { deleteArticle, getArticleDetail } from '@/api/article'
@@ -178,11 +179,11 @@ onMounted(() => {
         </div>
         <div class="action-bar">
           <el-button :type="liked ? 'primary' : 'default'" round @click="onToggleLike">
-            <el-icon><star /></el-icon>
+            <el-icon><Star /></el-icon>
             点赞 {{ article.likeCount }}
           </el-button>
           <el-button :type="favorited ? 'warning' : 'default'" round @click="onToggleFavorite">
-            <el-icon><collection-tag /></el-icon>
+            <el-icon><CollectionTag /></el-icon>
             {{ favorited ? '已收藏' : '收藏' }}
           </el-button>
         </div>

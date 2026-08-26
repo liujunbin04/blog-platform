@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import AppHeader from '@/components/AppHeader.vue'
+// 按需导入改造后不再有 app.use(ElementPlus)，中文 locale 改由 config-provider 注入
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-header class="layout-header">
-      <AppHeader />
-    </el-header>
-    <el-main class="layout-main">
-      <router-view />
-    </el-main>
-  </el-container>
+  <el-config-provider :locale="zhCn">
+    <el-container class="layout">
+      <el-header class="layout-header">
+        <AppHeader />
+      </el-header>
+      <el-main class="layout-main">
+        <router-view />
+      </el-main>
+    </el-container>
+  </el-config-provider>
 </template>
 
 <style scoped>

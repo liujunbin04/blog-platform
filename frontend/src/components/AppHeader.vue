@@ -2,6 +2,7 @@
 import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Bell, ArrowDown, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import { getNotifications, markAllNotifications } from '@/api/notification'
 import type { NotificationVO } from '@/types/api'
@@ -58,7 +59,7 @@ onMounted(() => {
     >
       <template #append>
         <el-button @click="onSearch">
-          <el-icon><search /></el-icon>
+          <el-icon><Search /></el-icon>
         </el-button>
       </template>
     </el-input>
@@ -67,7 +68,7 @@ onMounted(() => {
         <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
           <el-dropdown placement="bottom-end" width="320" @visible-change="(v: boolean) => v && loadNotifications()">
             <span class="notify-trigger">
-              <el-icon :size="20"><bell /></el-icon>
+              <el-icon :size="20"><Bell /></el-icon>
             </span>
             <template #dropdown>
               <el-dropdown-menu>
@@ -96,7 +97,7 @@ onMounted(() => {
         <el-dropdown @command="onUserCommand">
           <span class="nickname">
             {{ userStore.user?.nickname || userStore.user?.username }}
-            <el-icon><arrow-down /></el-icon>
+            <el-icon><ArrowDown /></el-icon>
           </span>
           <template #dropdown>
             <el-dropdown-menu>

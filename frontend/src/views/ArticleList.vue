@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { View, Star, Histogram } from '@element-plus/icons-vue'
 import { getArticlePage, getHotArticles, searchArticles } from '@/api/article'
 import type { ArticleSearchVO, ArticleVO } from '@/types/api'
 import { formatDateTime, highlightHtml } from '@/utils/format'
@@ -87,7 +88,7 @@ onMounted(load)
     </div>
 
     <div v-if="hotList.length > 0" class="hot-block">
-      <h4 class="hot-title"><el-icon><histogram /></el-icon> 热门文章</h4>
+      <h4 class="hot-title"><el-icon><Histogram /></el-icon> 热门文章</h4>
       <ol class="hot-list">
         <li v-for="(a, i) in hotList" :key="a.id" @click="$router.push(`/articles/${a.id}`)">
           <span class="hot-rank" :class="{ top: i < 3 }">{{ i + 1 }}</span>
@@ -113,8 +114,8 @@ onMounted(load)
           <span>{{ item.author?.nickname || '佚名' }}</span>
           <el-tag v-if="item.category" size="small" type="info">{{ item.category }}</el-tag>
           <span>{{ formatDateTime(item.createTime) }}</span>
-          <span class="meta-num"><el-icon><view /></el-icon>{{ item.viewCount }}</span>
-          <span class="meta-num"><el-icon><star /></el-icon>{{ item.likeCount }}</span>
+          <span class="meta-num"><el-icon><View /></el-icon>{{ item.viewCount }}</span>
+          <span class="meta-num"><el-icon><Star /></el-icon>{{ item.likeCount }}</span>
         </div>
       </el-card>
     </div>
