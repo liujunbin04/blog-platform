@@ -35,9 +35,13 @@
 - Consumes: 现有 `getDetail(id)`、`getArticleById(id)`（@Cacheable 纯读）、`SecurityUtil.getLoginUser()`（匿名时抛 BusinessException(401)）、`LoginUser.getUserId()`。
 - Produces: `GET /api/articles/{id}/edit-data` 返回 `Result<ArticleVO>`（需登录+仅作者）；前端 API 函数 `getArticleEditData(id: number | string): Promise<ArticleVO>`。
 
-- [ ] **Step 1: ArticleServiceImpl.getDetail 加草稿校验**
+- [ ] **Step 1: ArticleService 接口不加方法（说明）**
 
-在 `getDetail` 方法中，`if (article == null) throw ...` 之后插入：
+编辑数据接口的权限校验放在 Controller 层（原因见 Step 2 的注释），Service 层无需新增方法，直接复用现有 `getById` 与 `getArticleById`。
+
+- [ ] **Step 1a: ArticleServiceImpl.getDetail 加草稿校验**
+
+在 `getDetail` 方法中，第一个 `if (article == null) throw ...` 之后插入：
 
 ```java
         // 草稿（status=0）仅作者本人可见：其余任何人（含匿名访客）一律按
@@ -53,49 +57,18 @@
         }
 ```
 
-注意：`getDetail` 方法上有 `@CachePut(value = "article", key = "#id")`——缓存的是 VO 结果，权限分支在方法内部执行，不影响缓存正确性（同一篇文章对作者和游客返回相同内容；草稿对非作者抛异常不会被缓存）。
+说明：`getDetail` 上的 `@CachePut(value = "article", key = "#id")` 缓存的是 VO 结果；草稿对非作者抛异常不会被缓存，作者与游客看到的已发布文章内容相同，缓存正确性不受影响。
 
-- [ ] **Step 2: ArticleService 接口添加方法**
+- [ ] **Step 1b: ArticleController 新增 edit-data 端点**
 
-```java
-    /**
-     * 查询文章编辑数据（仅作者本人，纯读不增加浏览量）。
-     * 复用 getArticleById 的 @Cacheable 缓存
-     */
-    ArticleVO getEditData(Long id);
-```
-
-- [ ] **Step 3: ArticleServiceImpl 实现**
-
-```java
-    @Override
-    public ArticleVO getEditData(Long id) {
-        // 权限在前：先确认是本人的文章（复用 updateArticle/deleteArticle 同款校验语义）
-        Article article = getById(id);
-        if (article == null) {
-            throw new BusinessException(404, "文章不存在");
-        }
-        if (!article.getAuthorId().equals(SecurityUtil.getCurrentUserId())) {
-            throw new BusinessException(403, "无权操作他人的文章");
-        }
-        // 必须经代理调用才能命中 @Cacheable（类内直调缓存不生效，见接口注释）
-        return getArticleById(id);
-    }
-```
-
-等等——上面注释自相矛盾：`getEditData` 与 `getArticleById` 在同一个类里，`this.getArticleById(id)` 是类内直调，@Cacheable **不会**生效。正确写法是把权限校验放在 Controller 层做不到的范围内、但调用走代理。两种可行方案：(a) 注入自身代理；(b) 把权限校验放进 Controller，Controller 直接调 `articleService.getArticleById(id)`。采用方案 (b)，更符合本项目「controller 薄、service 厚」以外的既有现实——FavoriteServiceImpl 等已有跨 service 校验先例，但此处权限校验依赖当前登录用户与文章归属比较，放 Controller 会引入 SecurityUtil 到 Controller 的先例（ArticleController 目前未用）。权衡后仍取 (b)：保持缓存生效优先。
-
-**修正后的 Step 2/3：**
-
-Step 2 撤销——ArticleService 接口不加方法。
-
-Step 3 替换为 ArticleController 中新增端点：
+在 `detail` 端点之前插入：
 
 ```java
     /**
      * 文章编辑数据（仅作者本人）：GET /api/articles/{id}/edit-data
      * <p>与详情接口的区别：走纯读缓存、浏览量不自增；
-     * 权限校验在此处做而非 Service 层，保证 getArticleById 经代理调用、@Cacheable 生效</p>
+     * 权限校验在此处做而非 Service 层，保证 getArticleById 经代理调用、@Cacheable 生效
+     * （类内直调缓存不生效，见 ArticleService.getArticleById 的注释）</p>
      */
     @GetMapping("/{id}/edit-data")
     public Result<ArticleVO> editData(@PathVariable Long id) {
@@ -111,6 +84,8 @@ Step 3 替换为 ArticleController 中新增端点：
 ```
 
 需要补充 import：`com.example.blog.common.BusinessException`、`com.example.blog.entity.Article`、`com.example.blog.utils.SecurityUtil`。
+
+安全说明：该路径是 `/api/articles/{id}/edit-data` 两段路径，现有放行规则 `GET /api/articles/*` 只匹配单段路径，不会被误放行——SecurityConfig 无需改动。
 
 - [ ] **Step 4: 后端编译验证**
 
@@ -193,18 +168,6 @@ import java.util.stream.Collectors;
     /**
      * 批量回查作者并填充：一次 IN 查询代替逐条查（防 N+1），顺序保持命中顺序
      */
-    public static List<ArticleSearchVO> fillAuthors(List<ArticleSearchVO> list,
-            Map<Long, User> userMap) {
-        for (ArticleSearchVO vo : list) {
-            User user = vo.getId() == null ? null : null; // placeholder never used — see below
-        }
-        return list;
-    }
-```
-
-**取消上面的 placeholder 写法**，直接使用以下最终实现（简洁且无多余代码）：
-
-```java
     public static List<ArticleSearchVO> fillAuthors(List<ArticleSearchVO> vos,
             Map<Long, User> usersById) {
         for (ArticleSearchVO vo : vos) {
@@ -215,7 +178,7 @@ import java.util.stream.Collectors;
     }
 ```
 
-同时类中需要暂存 authorId 才能回查——在 `from(SearchHit)` 组装时保留它。最终字段区追加：
+同时类中需要暂存 authorId 才能回查——在字段区追加：
 
 ```java
     /** 作者 id（ES 文档自带，用于批量回查作者；不出现在最终 JSON 之外的场景无需隐藏） */
@@ -462,18 +425,12 @@ watch(
 )
 
 // 任一查询条件变化统一走 load()；参数快照保证同批变化只发一次请求
-watch([pageNum, () => sort.value], load)
+watch([pageNum, pageSize, () => sort.value], load)
 
 onMounted(load)
 ```
 
-注意：`watch([pageNum, () => sort.value], load)` 故意不含 pageSize——el-pagination 的 size-change 在非第一页时会连带 current-page 复位触发 current-change，pageNum 的 watch 已覆盖该场景；若 pageSize 单独变化（第一页改每页大小），pageNum 不变，需要显式纳入。因此最终 watch 数组为：
-
-```ts
-watch([pageNum, pageSize, () => sort.value], load)
-```
-
-（以本行实现为准，上一段两行 watch 示例作废。）
+说明：`lastParams` 声明在 `load` 之后仍安全——`load` 首次被调用发生在 `onMounted`（setup 同步段之后），届时 `lastParams` 已初始化。pageSize 显式纳入 watch：非第一页改每页大小时 el-pagination 连带复位 pageNum，Vue 的 watch 会把同批变化合并为一次回调；第一页单独改 pageSize 也被覆盖。
 
 - [ ] **Step 2: 模板移除事件回调**
 
@@ -517,19 +474,9 @@ git commit -m "fix(frontend): 列表页查询条件变化合并为单次请求"
   if (!valid) return
 ```
 
-- [ ] **Step 2: 详情页 onDelete 取消静默**
+- [ ] **Step 2: 详情页与个人中心删除确认取消静默**
 
 `ArticleDetail.vue` `onDelete` 改为：
-
-```ts
-async function onDelete() {
-  // 用户取消确认时 ElMessageBox reject：捕获后静默返回
-  await ElMessageBox.confirm('删除后不可恢复，确定删除该文章吗？', '删除确认', { type: 'warning' }).catch(() => null)
-  if (await ElMessageBox.confirm === null) {} // 占位错误——下一行才是正确实现
-}
-```
-
-**以上占位块作废**，onDelete 最终实现：
 
 ```ts
 async function onDelete() {
@@ -669,5 +616,6 @@ git commit -m "fix(frontend): 清理未处理的 promise rejection 并完善评�
 ## Self-Review 记录
 
 - 规格覆盖：Part A 十项 → A1+A2=Task 1、A3=Task 2、A4=Task 3、A5=Task 4、A6=Task 5、A7+A8+A9=Task 6、A10 并入 A7（spec 已注明无需单独改动）。无遗漏。
-- 计划撰写过程中发现并就地修正了两处初稿缺陷：Task 1 的 @Cacheable 类内直调失效问题（改为 Controller 层权限校验 + 经代理调用）；Task 6 Step 2/Step 4 曾留占位块，均已标注作废并给出最终实现。执行者以各任务中标明「最终实现」的代码块为准。
-- 类型一致性：`getArticleEditData(id)` 前后端签名一致；`fillAuthors(list, map)` 与 Controller 调用一致；`countComments(comments: CommentVO[])` 与模板用法一致；`lastParams` ref 在使用前声明（提升后实际位于 load 定义之后、首次调用之前——JS 运行时序安全，因 onMounted/watch 触发晚于 setup 同步段）。
+- 撰写中发现的 @Cacheable 类内直调失效问题已在 Task 1 就地解决：权限校验放 Controller 层，`getArticleById` 经代理调用，缓存生效；SecurityConfig 无需改动（两段路径不被单段通配误放行）。
+- 类型一致性：`getArticleEditData(id)` 前后端签名一致；`fillAuthors(vos, usersById)` 与 Controller 调用一致；`countComments(comments: CommentVO[])` 与模板用法一致；`lastParams` 声明时序安全（首次调用晚于 setup 同步段）。
+- 占位符扫描：无 TBD/TODO/作废块残留，所有代码块均为最终实现。
