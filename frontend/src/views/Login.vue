@@ -25,7 +25,9 @@ const rules: FormRules = {
 }
 
 async function onSubmit() {
-  await formRef.value?.validate()
+  // validate() 在校验失败时 reject：捕获并早退，字段错误提示由表单自行展示
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
   loading.value = true
   try {
     const loginVO = await login(form)

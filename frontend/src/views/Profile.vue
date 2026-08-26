@@ -30,7 +30,11 @@ async function loadMyArticles() {
 }
 
 async function onDeleteArticle(article: ArticleVO) {
-  await ElMessageBox.confirm(`确定删除《${article.title}》吗？`, '删除确认', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm(`确定删除《${article.title}》吗？`, '删除确认', { type: 'warning' })
+  } catch {
+    return // 用户取消确认：静默返回
+  }
   await deleteArticle(article.id)
   ElMessage.success('删除成功')
   await loadMyArticles()

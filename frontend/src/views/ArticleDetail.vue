@@ -67,32 +67,44 @@ async function loadInteractionStatus() {
 
 async function onToggleLike() {
   if (!requireLogin() || !article.value) return
-  if (liked.value) {
-    await unlikeArticle(articleId)
-    liked.value = false
-    article.value.likeCount -= 1
-  } else {
-    await likeArticle(articleId)
-    liked.value = true
-    article.value.likeCount += 1
+  try {
+    if (liked.value) {
+      await unlikeArticle(articleId)
+      liked.value = false
+      article.value.likeCount -= 1
+    } else {
+      await likeArticle(articleId)
+      liked.value = true
+      article.value.likeCount += 1
+    }
+  } catch {
+    // 失败时保持原状态（提示已由拦截器弹出）
   }
 }
 
 async function onToggleFavorite() {
   if (!requireLogin()) return
-  if (favorited.value) {
-    await unfavoriteArticle(articleId)
-    favorited.value = false
-    ElMessage.success('已取消收藏')
-  } else {
-    await favoriteArticle(articleId)
-    favorited.value = true
-    ElMessage.success('收藏成功')
+  try {
+    if (favorited.value) {
+      await unfavoriteArticle(articleId)
+      favorited.value = false
+      ElMessage.success('已取消收藏')
+    } else {
+      await favoriteArticle(articleId)
+      favorited.value = true
+      ElMessage.success('收藏成功')
+    }
+  } catch {
+    // 失败时保持原状态
   }
 }
 
 async function onDelete() {
-  await ElMessageBox.confirm('删除后不可恢复，确定删除该文章吗？', '删除确认', { type: 'warning' })
+  try {
+    await ElMessageBox.confirm('删除后不可恢复，确定删除该文章吗？', '删除确认', { type: 'warning' })
+  } catch {
+    return // 用户取消确认：静默返回
+  }
   await deleteArticle(articleId)
   ElMessage.success('删除成功')
   await router.push('/articles')
@@ -104,6 +116,11 @@ function onReply(comment: CommentVO) {
 
 function cancelReply() {
   replyTo.value = null
+}
+
+/** 递归统计评论总数（含各级子评论） */
+function countComments(list: CommentVO[]): number {
+  return list.reduce((sum, c) => sum + 1 + countComments(c.children), 0)
 }
 
 /** 回复任意层级评论都挂到其一级父评论下（见任务 Interfaces 的语义约定） */
@@ -174,7 +191,7 @@ onMounted(() => {
       </el-card>
 
       <el-card class="comments-card">
-        <h3 class="comments-title">评论（{{ comments.length }}）</h3>
+        <h3 class="comments-title">评论（{{ countComments(comments) }}）</h3>
         <div v-if="replyTo" class="reply-banner">
           回复 @{{ replyTo.author?.nickname || '佚名' }}
           <el-button link size="small" @click="cancelReply">取消</el-button>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
@@ -12,8 +12,10 @@ const md = new MarkdownIt({ breaks: true })
 const route = useRoute()
 const router = useRouter()
 
-/** 有 id 即编辑模式 */
-const articleId = route.params.id as string | undefined
+/** 有 id 即编辑模式；computed 使 /publish ↔ /publish/:id 互跳时组件复用也能正确切换 */
+const articleId = computed(() =>
+  route.params.id ? (route.params.id as string) : undefined,
+)
 
 const formRef = ref<FormInstance>()
 const pageLoading = ref(false)
@@ -38,10 +40,10 @@ const rules: FormRules = {
 const previewHtml = computed(() => md.render(form.content))
 
 async function loadForEdit() {
-  if (!articleId) return
+  if (!articleId.value) return
   pageLoading.value = true
   try {
-    const article = await getArticleEditData(articleId)
+    const article = await getArticleEditData(articleId.value)
     form.title = article.title
     form.category = article.category ?? ''
     form.tags = article.tags ?? ''
@@ -52,13 +54,15 @@ async function loadForEdit() {
 }
 
 async function onSubmit() {
-  await formRef.value?.validate()
+  // validate() 在校验失败时 reject：捕获并早退，字段错误提示由表单自行展示
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
   saving.value = true
   try {
-    const saved = articleId
-      ? await updateArticle(articleId, form)
+    const saved = articleId.value
+      ? await updateArticle(articleId.value, form)
       : await publishArticle(form)
-    ElMessage.success(articleId ? '更新成功' : '发布成功')
+    ElMessage.success(articleId.value ? '更新成功' : '发布成功')
     await router.push(`/articles/${saved.id}`)
   } catch {
     // 错误已由拦截器提示
@@ -67,7 +71,21 @@ async function onSubmit() {
   }
 }
 
-onMounted(loadForEdit)
+watch(
+  articleId,
+  (id, oldId) => {
+    if (!id) {
+      // 进入新建模式：清空上一次编辑残留
+      form.title = ''
+      form.category = ''
+      form.tags = ''
+      form.content = ''
+    } else if (id !== oldId) {
+      loadForEdit()
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>

@@ -42,7 +42,9 @@ const rules: FormRules = {
 }
 
 async function onSubmit() {
-  await formRef.value?.validate()
+  // validate() 在校验失败时 reject：捕获并早退，字段错误提示由表单自行展示
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
   loading.value = true
   try {
     // 选填字段为空串时不传，避免后端把 "" 当非法邮箱
