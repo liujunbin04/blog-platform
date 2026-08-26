@@ -11,11 +11,14 @@ import com.example.blog.entity.ArticleDocument;
 import com.example.blog.entity.User;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.ArticleSearchVO;
 import com.example.blog.vo.ArticleVO;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Collections;
@@ -48,6 +52,8 @@ public class ArticleController {
     private final ArticleSearchRepository articleSearchRepository;
 
     private final UserService userService;
+
+    private final HotArticleService hotArticleService;
 
     /**
      * 发布文章
@@ -109,6 +115,16 @@ public class ArticleController {
                 dto.getPage().longValue(),
                 dto.getSize().longValue()
         ));
+    }
+
+    /**
+     * 热门文章（Redis ZSet，定时任务维护；游客可看）：
+     * GET /api/articles/hot?topN=10
+     */
+    @GetMapping("/hot")
+    public Result<List<ArticleVO>> hot(
+            @RequestParam(defaultValue = "10") @Min(value = 1, message = "topN 最小为 1") @Max(value = 50, message = "topN 最大为 50") int topN) {
+        return Result.success(hotArticleService.getHotArticles(topN));
     }
 
     /**
