@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS `user` (
   `create_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_email` (`email`)
+  UNIQUE KEY `uk_username_deleted` (`username`, `deleted`),
+  UNIQUE KEY `uk_email_deleted` (`email`, `deleted`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '用户表';
 
 -- -------------------------------------------------------------
@@ -74,7 +74,6 @@ CREATE TABLE IF NOT EXISTS `like_record` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `user_id`     BIGINT UNSIGNED NOT NULL COMMENT '点赞用户 id（user.id）',
   `article_id`  BIGINT UNSIGNED NOT NULL COMMENT '文章 id（article.id）',
-  `deleted`     TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 未删除 1 已删除',
   `create_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -89,10 +88,25 @@ CREATE TABLE IF NOT EXISTS `favorite` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `user_id`     BIGINT UNSIGNED NOT NULL COMMENT '收藏用户 id（user.id）',
   `article_id`  BIGINT UNSIGNED NOT NULL COMMENT '文章 id（article.id）',
-  `deleted`     TINYINT         NOT NULL DEFAULT 0 COMMENT '逻辑删除：0 未删除 1 已删除',
   `create_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_user_article` (`user_id`, `article_id`),
   KEY `idx_article` (`article_id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '收藏表';
+
+-- -------------------------------------------------------------
+-- 6. 站内通知表
+-- -------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `notification` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `recipient_id` BIGINT UNSIGNED NOT NULL COMMENT '收件人 id（user.id）',
+  `sender_id`    BIGINT UNSIGNED NOT NULL COMMENT '发件人 id（user.id）',
+  `type`         VARCHAR(20)     NOT NULL COMMENT '类型：COMMENT/LIKE（同 NotificationMessage.type 取值）',
+  `article_id`   BIGINT UNSIGNED NOT NULL COMMENT '关联文章 id',
+  `content`      VARCHAR(500)    DEFAULT NULL COMMENT '通知内容摘要',
+  `is_read`      TINYINT         NOT NULL DEFAULT 0 COMMENT '是否已读：0 未读 1 已读',
+  `create_time`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_recipient` (`recipient_id`, `is_read`, `create_time`)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '站内通知表';
