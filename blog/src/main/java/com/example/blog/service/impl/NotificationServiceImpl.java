@@ -57,7 +57,11 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         notification.setSenderId(message.getSenderId());
         notification.setType(message.getType());
         notification.setArticleId(message.getArticleId());
-        notification.setContent(message.getContent());
+        // content 取自评论原文，CommentDTO 允许 1000 字而本列为 VARCHAR(500)：
+        // 超长会插库失败并经 basicNack(requeue) 变成毒消息死循环，截断兜底
+        String content = message.getContent();
+        notification.setContent(content == null ? null
+                : content.substring(0, Math.min(content.length(), 500)));
         notification.setIsRead(0);
         // create_time 由数据库默认值生成
         save(notification);

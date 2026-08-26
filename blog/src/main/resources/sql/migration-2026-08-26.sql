@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS `notification` (
   `sender_id`    BIGINT UNSIGNED NOT NULL COMMENT '发件人 id（user.id）',
   `type`         VARCHAR(20)     NOT NULL COMMENT '类型：COMMENT/LIKE（同 NotificationMessage.type 取值）',
   `article_id`   BIGINT UNSIGNED NOT NULL COMMENT '关联文章 id',
-  `content`      VARCHAR(500)    DEFAULT NULL COMMENT '通知内容摘要',
+  `content`      VARCHAR(1000)   DEFAULT NULL COMMENT '通知内容摘要',
   `is_read`      TINYINT         NOT NULL DEFAULT 0 COMMENT '是否已读：0 未读 1 已读',
   `create_time`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),

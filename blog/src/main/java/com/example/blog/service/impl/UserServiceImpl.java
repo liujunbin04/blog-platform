@@ -32,6 +32,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (lambdaQuery().eq(User::getUsername, dto.getUsername()).count() > 0) {
             throw new BusinessException(400, "用户名已存在");
         }
+        // @Email 放行空串；空串落库会在 uk_email_deleted 唯一索引下互撞，归一化为 null
+        if (!StringUtils.hasText(dto.getEmail())) {
+            dto.setEmail(null);
+        }
         // 邮箱为可选字段，仅填写时校验唯一性
         if (StringUtils.hasText(dto.getEmail())
                 && lambdaQuery().eq(User::getEmail, dto.getEmail()).count() > 0) {
