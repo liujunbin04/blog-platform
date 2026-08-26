@@ -4,7 +4,8 @@ import router from '@/router'
 import { useUserStore } from '@/stores/user'
 
 const request = axios.create({
-  baseURL: 'http://localhost:8080/api',
+  // 生产部署通过 VITE_API_BASE 指向后端；开发环境缺省直连本地服务
+  baseURL: import.meta.env.VITE_API_BASE ?? 'http://localhost:8080/api',
   timeout: 10000,
 })
 
