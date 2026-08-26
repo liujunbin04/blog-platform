@@ -34,6 +34,11 @@ export function getMyArticles(params: ArticleQuery) {
   return request.get<never, PageResult<ArticleVO>>('/articles/my', { params })
 }
 
+/** 文章编辑数据（仅作者本人，不增加浏览量） */
+export function getArticleEditData(id: number | string) {
+  return request.get<never, ArticleVO>(`/articles/${id}/edit-data`)
+}
+
 /** 发布文章 */
 export function publishArticle(data: ArticleFormData) {
   return request.post<never, ArticleVO>('/articles', data)

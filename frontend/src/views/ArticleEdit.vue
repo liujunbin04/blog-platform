@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import MarkdownIt from 'markdown-it'
-import { getArticleDetail, publishArticle, updateArticle } from '@/api/article'
+import { getArticleEditData, publishArticle, updateArticle } from '@/api/article'
 import type { ArticleFormData } from '@/api/article'
 
 const md = new MarkdownIt({ breaks: true })
@@ -41,7 +41,7 @@ async function loadForEdit() {
   if (!articleId) return
   pageLoading.value = true
   try {
-    const article = await getArticleDetail(articleId)
+    const article = await getArticleEditData(articleId)
     form.title = article.title
     form.category = article.category ?? ''
     form.tags = article.tags ?? ''

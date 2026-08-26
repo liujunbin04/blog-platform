@@ -1,13 +1,16 @@
 package com.example.blog.controller;
 
+import com.example.blog.common.BusinessException;
 import com.example.blog.common.PageResult;
 import com.example.blog.common.Result;
 import com.example.blog.dto.ArticleDTO;
 import com.example.blog.dto.ArticlePageDTO;
 import com.example.blog.dto.ArticleSearchDTO;
+import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.ArticleSearchVO;
 import com.example.blog.vo.ArticleVO;
 import jakarta.validation.Valid;
@@ -89,6 +92,24 @@ public class ArticleController {
     @GetMapping("/my")
     public Result<PageResult<ArticleVO>> my(@Valid ArticlePageDTO dto) {
         return Result.success(articleService.pageMyArticles(dto));
+    }
+
+    /**
+     * 文章编辑数据（仅作者本人）：GET /api/articles/{id}/edit-data
+     * <p>与详情接口的区别：走纯读缓存、浏览量不自增；
+     * 权限校验在此处做而非 Service 层，保证 getArticleById 经代理调用、@Cacheable 生效
+     * （类内直调缓存不生效，见 ArticleService.getArticleById 的注释）</p>
+     */
+    @GetMapping("/{id}/edit-data")
+    public Result<ArticleVO> editData(@PathVariable Long id) {
+        Article article = articleService.getById(id);
+        if (article == null) {
+            throw new BusinessException(404, "文章不存在");
+        }
+        if (!article.getAuthorId().equals(SecurityUtil.getCurrentUserId())) {
+            throw new BusinessException(403, "无权操作他人的文章");
+        }
+        return Result.success(articleService.getArticleById(id));
     }
 
     /**

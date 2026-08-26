@@ -134,6 +134,17 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (article == null) {
             throw new BusinessException(404, "文章不存在");
         }
+        // 草稿（status=0）仅作者本人可见：其余任何人（含匿名访客）一律按
+        // 「不存在」处理——返回 404 而非 401/403，避免向未授权者暴露草稿的存在性
+        boolean isOwner = false;
+        try {
+            isOwner = article.getAuthorId().equals(SecurityUtil.getCurrentUserId());
+        } catch (BusinessException e) {
+            // 匿名访客：isOwner 保持 false，走下面的 404 分支
+        }
+        if (article.getStatus() != 1 && !isOwner) {
+            throw new BusinessException(404, "文章不存在");
+        }
         // 原子自增浏览量（每次访问都自增，这部分不走缓存）
         lambdaUpdate().setSql("view_count = view_count + 1").eq(Article::getId, id).update();
         // 直接查库取最新数据（缓存里是旧浏览量，不能读缓存），交给 @CachePut 刷新
