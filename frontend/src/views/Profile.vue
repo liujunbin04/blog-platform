@@ -3,6 +3,9 @@
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+// 显式 import 的 ElMessage/ElMessageBox 对 resolver 不可见，样式需手动副作用导入
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { deleteArticle, getMyArticles } from '@/api/article'
 import { getMyFavorites, unfavoriteArticle } from '@/api/favorite'
 import type { ArticleVO, FavoriteVO } from '@/types/api'

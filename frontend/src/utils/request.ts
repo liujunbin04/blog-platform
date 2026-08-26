@@ -1,5 +1,7 @@
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+// 显式 import 的 ElMessage 对 resolver 不可见，样式需手动副作用导入（401 拦截器弹 toast）
+import 'element-plus/es/components/message/style/css'
 import router from '@/router'
 import { useUserStore } from '@/stores/user'
 

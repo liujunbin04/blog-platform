@@ -3,6 +3,8 @@ import { computed, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
+// 显式 import 的 ElMessage 对 resolver 不可见，样式需手动副作用导入
+import 'element-plus/es/components/message/style/css'
 import MarkdownIt from 'markdown-it'
 import { getArticleEditData, publishArticle, updateArticle } from '@/api/article'
 import type { ArticleFormData } from '@/api/article'

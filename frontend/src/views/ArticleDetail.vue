@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+// 显式 import 的 ElMessage/ElMessageBox 对 resolver 不可见，样式需手动副作用导入
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { Star, CollectionTag } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 import { addComment, getCommentTree } from '@/api/comment'

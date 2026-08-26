@@ -13,7 +13,7 @@ export default defineConfig({
     vue(),
     vueDevTools(),
     // 组件与常用 API 按需自动导入，替代 main.ts 全量注册；
-    // ElMessage 等业务里显式 import 的用法由 resolver 补样式注入，保持显式写法不变
+    // 显式 import 的 ElMessage/ElMessageBox 对 resolver 不可见，其样式由各文件内的 style/css 副作用导入提供
     AutoImport({
       imports: ['vue', 'vue-router'],
       resolvers: [ElementPlusResolver()],
