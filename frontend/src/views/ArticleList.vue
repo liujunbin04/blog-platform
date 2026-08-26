@@ -20,12 +20,22 @@ const keyword = ref((route.query.keyword as string) ?? '')
 
 /** 关键词非空走 ES 搜索接口，否则走普通分页接口 */
 async function load() {
+  const params = JSON.stringify({
+    kw: keyword.value.trim(),
+    page: pageNum.value,
+    size: pageSize.value,
+    sort: sort.value,
+  })
+  // 参数快照去重：pageSize 变化引发的 current-change + size-change 连发、
+  // 以及 watch 对同批变化的重复触发，都收敛为一次网络请求
+  if (params === lastParams.value) return
   loading.value = true
   try {
     const kw = keyword.value.trim()
     const page = kw
       ? await searchArticles({ keyword: kw, page: pageNum.value, size: pageSize.value })
       : await getArticlePage({ pageNum: pageNum.value, pageSize: pageSize.value, sort: sort.value })
+    lastParams.value = params
     list.value = page.list as ListItem[]
     total.value = Number(page.total)
   } catch {
@@ -35,10 +45,11 @@ async function load() {
   }
 }
 
-/** 条件变化（换排序 / 换每页大小 / 清空关键词）后从第一页重新加载 */
+const lastParams = ref('')
+
+/** 条件变化（换排序 / 换每页大小）从第一页重新加载：只改 pageNum，由 watch 统一触发 */
 function resetAndLoad() {
   pageNum.value = 1
-  load()
 }
 
 // 用户停留在列表页时再次通过顶部导航搜索：响应 query 变化
@@ -50,10 +61,8 @@ watch(
   },
 )
 
-function onTagClose() {
-  keyword.value = ''
-  resetAndLoad()
-}
+// 任一查询条件变化统一走 load()；参数快照保证同批变化只发一次请求
+watch([pageNum, pageSize, () => sort.value], load)
 
 onMounted(load)
 </script>
@@ -61,11 +70,11 @@ onMounted(load)
 <template>
   <div class="article-list">
     <div class="toolbar">
-      <el-radio-group v-model="sort" @change="resetAndLoad">
+      <el-radio-group v-model="sort">
         <el-radio-button value="time">最新</el-radio-button>
         <el-radio-button value="hot">最热</el-radio-button>
       </el-radio-group>
-      <el-tag v-if="keyword.trim()" closable @close="onTagClose">搜索：{{ keyword }}</el-tag>
+      <el-tag v-if="keyword.trim()" closable @close="resetAndLoad">搜索：{{ keyword }}</el-tag>
     </div>
 
     <el-empty v-if="!loading && list.length === 0" description="暂无文章" />
@@ -97,8 +106,6 @@ onMounted(load)
       :page-sizes="[10, 20, 50]"
       layout="total, sizes, prev, pager, next"
       class="pagination"
-      @current-change="load"
-      @size-change="resetAndLoad"
     />
   </div>
 </template>
