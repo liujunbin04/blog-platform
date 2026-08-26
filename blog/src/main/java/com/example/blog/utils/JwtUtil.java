@@ -50,21 +50,4 @@ public class JwtUtil {
                 .getBody();
     }
 
-    /**
-     * 校验 token 是否过期（解析失败同样视为无效）
-     */
-    public boolean isTokenExpired(String token) {
-        try {
-            return parseToken(token).getExpiration().before(new Date());
-        } catch (Exception e) {
-            return true;
-        }
-    }
-
-    /**
-     * 从 token 中获取用户名
-     */
-    public String getUsernameFromToken(String token) {
-        return parseToken(token).get("username", String.class);
-    }
 }

@@ -27,7 +27,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public UserVO register(RegisterDTO dto) {
-        // 用户名唯一性校验（逻辑删除用户不参与校验，MP 自动拼接 deleted=0）
+        // 用户名唯一性校验（逻辑删除用户不参与校验，MP 自动拼接 deleted=0；
+        // DB 层唯一索引同样含 deleted 列，软删用户的用户名允许重新注册）
         if (lambdaQuery().eq(User::getUsername, dto.getUsername()).count() > 0) {
             throw new BusinessException(400, "用户名已存在");
         }

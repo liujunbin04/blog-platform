@@ -52,8 +52,10 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         }
         // 2. 回复评论：校验父评论存在且属于同一篇文章
         Long parentId = dto.getParentId() == null ? 0L : dto.getParentId();
+        // 回复目标评论（parentId != 0 时非 null；一级评论保持 null）
+        Comment parent = null;
         if (parentId != 0) {
-            Comment parent = getById(parentId);
+            parent = getById(parentId);
             if (parent == null) {
                 throw new BusinessException(404, "父评论不存在");
             }
@@ -73,7 +75,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         //    必须在事务提交后再投递：事务内直发的话消息可能先于提交到达消费者，
         //    消费者查库会查不到刚插入的评论
         Article article = articleService.getById(dto.getArticleId());
-        Long recipientId = parentId != 0 ? getById(parentId).getUserId() : article.getAuthorId();
+        Long recipientId = parent != null ? parent.getUserId() : article.getAuthorId();
         if (!recipientId.equals(senderId)) {
             NotificationMessage message = new NotificationMessage(
                     NotificationMessage.TYPE_COMMENT,

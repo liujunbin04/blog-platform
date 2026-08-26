@@ -33,16 +33,15 @@ public class ArticleSyncTask {
     @Scheduled(cron = "30 0/5 * * * ?")
     public void syncRecentArticles() {
         try {
-            // 查询最近 5 分钟更新过的已发布文章。
-            // 边界说明：窗口与任务间隔同为 5 分钟，理论上恰好落在边界上的更新
-            // 可能被漏掉一次，下一轮不会补（本任务无状态）；生产环境可把窗口
-            // 放宽到 6 分钟或用有状态的"上次同步时间"游标
+            // 查询最近 6 分钟更新过的已发布文章。
+            // 边界说明：任务间隔 5 分钟、窗口放宽到 6 分钟留 1 分钟重叠，
+            // 消除恰好落在边界上的更新被漏同步的风险（代价是极少量文章被重复写入 ES，幂等无害）
             List<Article> articles = articleService.lambdaQuery()
                     .eq(Article::getStatus, 1)
-                    .ge(Article::getUpdateTime, LocalDateTime.now().minusMinutes(5))
+                    .ge(Article::getUpdateTime, LocalDateTime.now().minusMinutes(6))
                     .list();
             if (articles.isEmpty()) {
-                log.debug("近 5 分钟无文章更新，跳过 ES 同步");
+                log.debug("近 6 分钟无文章更新，跳过 ES 同步");
                 return;
             }
             // 转成 ES 文档批量写入（saveAll 内部走 Bulk API，一次请求写入全部）
