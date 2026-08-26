@@ -10,8 +10,8 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: jdbc:mysql://localhost:3306/blog?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
     username: root
-    # TODO 根据实际情况修改密码
-    password: 123456
+    # 生产环境通过 DB_PASSWORD 环境变量注入，冒号后为开发默认值
+    password: ${DB_PASSWORD:123456}
 
   # Redis（Docker 容器 blog-redis 映射到宿主机 16379：
   # Windows 的 Hyper-V 保留端口段占用了 6379，绑定会报 socket forbidden）
@@ -63,7 +63,8 @@ logging:
 
 # 自定义 JWT 配置（由 JwtProperties 配置类读取，见 config 包）
 jwt:
-  # 签名密钥（HS256，128 位十六进制）：生产环境务必替换，建议通过环境变量注入
-  secret: 627d361efd9f4feff10aecfe60d3f848773ae6a82660f3eeec0515ad24f2053e9152d3d7b8a7f8f5c285f5c90522c3800642b16cfc80af772a361d018fb35cd4
+  # 签名密钥：生产环境通过 JWT_SECRET 环境变量注入（HS512 要求 ≥64 字节），
+  # 冒号后为开发默认值
+  secret: ${JWT_SECRET:627d361efd9f4feff10aecfe60d3f848773ae6a82660f3eeec0515ad24f2053e9152d3d7b8a7f8f5c285f5c90522c3800642b16cfc80af772a361d018fb35cd4}
   # 过期时间（毫秒）：86400000 = 24 小时
   expiration: 86400000

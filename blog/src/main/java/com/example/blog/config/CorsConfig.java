@@ -15,12 +15,11 @@ public class CorsConfig implements WebMvcConfigurer {
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                // 允许所有来源：携带凭证(allowCredentials=true)时不允许使用 allowedOrigins("*")，
-                // 必须用 allowedOriginPatterns("*")
+                // 允许所有来源：本项目 token 走 Authorization 头，浏览器凭证机制
+                // （Cookie 等）无用武之地，不开 allowCredentials，收紧放行面
                 .allowedOriginPatterns("*")
                 .allowedMethods("*")
                 .allowedHeaders("*")
-                .allowCredentials(true)
                 // 预检请求缓存 1 小时
                 .maxAge(3600);
     }
