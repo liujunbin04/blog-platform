@@ -4,6 +4,7 @@ import { formatDateTime } from '@/utils/format'
 
 defineProps<{
   comment: CommentVO
+  depth?: number
 }>()
 
 const emit = defineEmits<{
@@ -12,7 +13,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="comment-item">
+  <div class="comment-item" :class="{ deep: (depth ?? 0) >= 3 }">
     <div class="head">
       <el-avatar :size="28">{{ comment.author?.nickname?.charAt(0) || '?' }}</el-avatar>
       <span class="nickname">{{ comment.author?.nickname || '佚名' }}</span>
@@ -25,6 +26,7 @@ const emit = defineEmits<{
         v-for="child in comment.children"
         :key="child.id"
         :comment="child"
+        :depth="(depth ?? 0) + 1"
         @reply="emit('reply', $event)"
       />
     </div>
@@ -54,5 +56,8 @@ const emit = defineEmits<{
 }
 .children {
   margin-left: 36px;
+}
+.deep .children {
+  margin-left: 0;
 }
 </style>

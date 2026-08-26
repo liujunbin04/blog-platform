@@ -139,9 +139,6 @@ watch(
   border-radius: 4px;
   overflow-wrap: break-word;
 }
-.editor-preview :deep(img) {
-  max-width: 100%;
-}
 @media (max-width: 900px) {
   .editor {
     grid-template-columns: 1fr;

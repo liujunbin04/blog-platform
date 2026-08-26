@@ -242,20 +242,6 @@ onMounted(() => {
 .markdown-body {
   line-height: 1.8;
 }
-.markdown-body :deep(img) {
-  max-width: 100%;
-}
-.markdown-body :deep(pre) {
-  background: var(--el-fill-color-light);
-  padding: 12px;
-  border-radius: 4px;
-  overflow-x: auto;
-}
-.markdown-body :deep(code) {
-  background: var(--el-fill-color-light);
-  padding: 2px 4px;
-  border-radius: 3px;
-}
 .comments-card {
   margin-top: 16px;
 }

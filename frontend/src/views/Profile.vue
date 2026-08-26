@@ -46,6 +46,9 @@ const favTotal = ref(0)
 const favPage = reactive({ pageNum: 1, pageSize: 10 })
 const favLoading = ref(false)
 
+const activeTab = ref('articles')
+const favLoadedOnce = ref(false)
+
 async function loadFavorites() {
   favLoading.value = true
   try {
@@ -63,17 +66,23 @@ async function onCancelFavorite(item: FavoriteVO) {
   await loadFavorites()
 }
 
+function onTabChange(name: number | string) {
+  if (name === 'favorites' && !favLoadedOnce.value) {
+    favLoadedOnce.value = true
+    loadFavorites()
+  }
+}
+
 onMounted(() => {
   loadMyArticles()
-  loadFavorites()
 })
 </script>
 
 <template>
   <div class="profile">
     <h2 class="welcome">你好，{{ userStore.user?.nickname || userStore.user?.username }}</h2>
-    <el-tabs>
-      <el-tab-pane label="我的文章">
+    <el-tabs v-model="activeTab" @tab-change="onTabChange">
+      <el-tab-pane label="我的文章" name="articles">
         <el-table v-loading="myLoading" :data="myList">
           <el-table-column label="标题" min-width="220">
             <template #default="{ row }">
@@ -105,7 +114,7 @@ onMounted(() => {
         />
       </el-tab-pane>
 
-      <el-tab-pane label="我的收藏">
+      <el-tab-pane label="我的收藏" name="favorites">
         <el-table v-loading="favLoading" :data="favList">
           <el-table-column label="标题" min-width="220">
             <template #default="{ row }">

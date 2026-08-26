@@ -19,16 +19,25 @@ request.interceptors.request.use((config) => {
   return config
 })
 
+// 并发请求同时收到 401 时只处理第一个：其余跳过提示与跳转，避免警告轰炸
+let handlingUnauthorized = false
+
 /** 未登录 / 登录过期统一处理：清空本地状态并跳转登录页 */
 function handleUnauthorized(message: string) {
   const userStore = useUserStore()
   userStore.clearLogin()
+  if (handlingUnauthorized) return
+  handlingUnauthorized = true
   ElMessage.warning(message)
   if (router.currentRoute.value.path !== '/login') {
     router.push({
       path: '/login',
       query: { redirect: router.currentRoute.value.fullPath },
+    }).finally(() => {
+      handlingUnauthorized = false
     })
+  } else {
+    handlingUnauthorized = false
   }
 }
 
