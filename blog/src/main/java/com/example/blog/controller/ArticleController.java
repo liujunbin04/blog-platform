@@ -8,8 +8,10 @@ import com.example.blog.dto.ArticlePageDTO;
 import com.example.blog.dto.ArticleSearchDTO;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
+import com.example.blog.entity.User;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.ArticleSearchVO;
 import com.example.blog.vo.ArticleVO;
@@ -25,6 +27,13 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Collections;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+
 /**
  * 文章接口（全部需要登录，见 SecurityConfig）
  */
@@ -36,6 +45,8 @@ public class ArticleController {
     private final ArticleService articleService;
 
     private final ArticleSearchRepository articleSearchRepository;
+
+    private final UserService userService;
 
     /**
      * 发布文章
@@ -78,8 +89,21 @@ public class ArticleController {
     public Result<PageResult<ArticleSearchVO>> search(@Valid ArticleSearchDTO dto) {
         SearchHits<ArticleDocument> hits = articleSearchRepository
                 .searchByKeyword(dto.getKeyword(), dto.getPage(), dto.getSize());
+        List<ArticleSearchVO> list = hits.getSearchHits().stream()
+                .map(ArticleSearchVO::from)
+                .toList();
+        // 批量回查作者：与列表页相同的防 N+1 模式；
+        // 全部作者已被逻辑删除时 authorIds 可能为空集合，listByIds 传空会生成非法 SQL，必须判空
+        Set<Long> authorIds = list.stream()
+                .map(ArticleSearchVO::getAuthorId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+        Map<Long, User> userMap = authorIds.isEmpty() ? Collections.emptyMap()
+                : userService.listByIds(authorIds).stream()
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        ArticleSearchVO.fillAuthors(list, userMap);
         return Result.success(PageResult.of(
-                hits.getSearchHits().stream().map(ArticleSearchVO::from).toList(),
+                list,
                 hits.getTotalHits(),
                 dto.getPage().longValue(),
                 dto.getSize().longValue()

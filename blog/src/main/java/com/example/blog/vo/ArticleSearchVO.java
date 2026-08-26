@@ -1,6 +1,7 @@
 package com.example.blog.vo;
 
 import com.example.blog.entity.ArticleDocument;
+import com.example.blog.entity.User;
 import lombok.Data;
 import org.springframework.data.elasticsearch.core.SearchHit;
 
@@ -31,6 +32,12 @@ public class ArticleSearchVO {
 
     private Integer likeCount;
 
+    /** 作者 id（ES 文档自带，用于批量回查作者） */
+    private Long authorId;
+
+    /** 作者信息（由 controller 按 authorId 批量回查填充，作者已删除则为 null） */
+    private AuthorVO author;
+
     private LocalDateTime createTime;
 
     /**
@@ -59,6 +66,7 @@ public class ArticleSearchVO {
         vo.setTags(doc.getTags());
         vo.setViewCount(doc.getViewCount());
         vo.setLikeCount(doc.getLikeCount());
+        vo.setAuthorId(doc.getAuthorId());
         // ES 里存的是 Instant（UTC），转回与 MySQL 一致的系统默认时区
         vo.setCreateTime(doc.getCreateTime() != null
                 ? doc.getCreateTime().atZone(ZoneId.systemDefault()).toLocalDateTime()
@@ -68,5 +76,17 @@ public class ArticleSearchVO {
 
     private static boolean hasHighlight(Map<String, List<String>> highlights, String field) {
         return highlights.containsKey(field) && !highlights.get(field).isEmpty();
+    }
+
+    /**
+     * 批量回查作者并填充：一次 IN 查询代替逐条查（防 N+1），顺序保持命中顺序
+     */
+    public static List<ArticleSearchVO> fillAuthors(List<ArticleSearchVO> vos,
+            Map<Long, User> usersById) {
+        for (ArticleSearchVO vo : vos) {
+            User author = vo.getAuthorId() == null ? null : usersById.get(vo.getAuthorId());
+            vo.setAuthor(author == null ? null : AuthorVO.from(author));
+        }
+        return vos;
     }
 }

@@ -53,6 +53,8 @@ export interface ArticleSearchVO {
   tags: string | null
   viewCount: number
   likeCount: number
+  authorId?: number | null
+  author: AuthorVO | null
   createTime: string
 }
 
