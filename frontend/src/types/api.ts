@@ -82,3 +82,24 @@ export interface CommentVO {
   createTime: string
   children: CommentVO[]
 }
+
+/** 后端 NotificationVO */
+export interface NotificationVO {
+  id: number
+  senderId: number
+  senderNickname: string | null
+  type: string
+  articleId: number
+  content: string | null
+  isRead: number
+  createTime: string
+}
+
+/** 后端 NotificationPageVO（比 PageResult 多未读数） */
+export interface NotificationPageVO {
+  total: number
+  pageNum: number
+  pageSize: number
+  list: NotificationVO[]
+  unreadCount: number
+}

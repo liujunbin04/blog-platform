@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getArticlePage, searchArticles } from '@/api/article'
+import { getArticlePage, getHotArticles, searchArticles } from '@/api/article'
 import type { ArticleSearchVO, ArticleVO } from '@/types/api'
 import { formatDateTime, highlightHtml } from '@/utils/format'
 
@@ -11,6 +11,15 @@ type ListItem = ArticleVO & Partial<Pick<ArticleSearchVO, 'contentSnippet'>>
 const route = useRoute()
 
 const loading = ref(false)
+const hotList = ref<ArticleVO[]>([])
+
+onMounted(async () => {
+  try {
+    hotList.value = await getHotArticles(10)
+  } catch {
+    // 热门位加载失败不打扰主流程
+  }
+})
 const list = ref<ListItem[]>([])
 const total = ref(0)
 const pageNum = ref(1)
@@ -77,6 +86,17 @@ onMounted(load)
       <el-tag v-if="keyword.trim()" closable @close="resetAndLoad">搜索：{{ keyword }}</el-tag>
     </div>
 
+    <div v-if="hotList.length > 0" class="hot-block">
+      <h4 class="hot-title"><el-icon><histogram /></el-icon> 热门文章</h4>
+      <ol class="hot-list">
+        <li v-for="(a, i) in hotList" :key="a.id" @click="$router.push(`/articles/${a.id}`)">
+          <span class="hot-rank" :class="{ top: i < 3 }">{{ i + 1 }}</span>
+          {{ a.title }}
+          <span class="hot-views">{{ a.viewCount }}</span>
+        </li>
+      </ol>
+    </div>
+
     <el-empty v-if="!loading && list.length === 0" description="暂无文章" />
     <div v-loading="loading">
       <el-card
@@ -116,6 +136,55 @@ onMounted(load)
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
+}
+.hot-block {
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+}
+.hot-title {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  color: var(--el-color-danger);
+}
+.hot-list {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+}
+.hot-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 14px;
+  cursor: pointer;
+}
+.hot-list li:hover {
+  color: var(--el-color-primary);
+}
+.hot-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+}
+.hot-rank.top {
+  background: var(--el-color-danger);
+  color: #fff;
+}
+.hot-views {
+  margin-left: auto;
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 .item {
   margin-bottom: 12px;

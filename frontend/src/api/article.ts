@@ -53,3 +53,8 @@ export function updateArticle(id: number | string, data: ArticleFormData) {
 export function deleteArticle(id: number | string) {
   return request.delete<never, null>(`/articles/${id}`)
 }
+
+/** 热门文章（按浏览量，游客可看） */
+export function getHotArticles(topN = 10) {
+  return request.get<never, ArticleVO[]>('/articles/hot', { params: { topN } })
+}
