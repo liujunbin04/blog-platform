@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 // 显式 import 的 ElMessage 对 resolver 不可见，样式需手动副作用导入
@@ -34,19 +34,36 @@ const notifyList = ref<NotificationVO[]>([])
 const unreadCount = ref(0)
 
 async function loadNotifications() {
-  const page = await getNotifications({ pageNum: 1, pageSize: 5 })
-  notifyList.value = page.list
-  unreadCount.value = Number(page.unreadCount)
+  try {
+    const page = await getNotifications({ pageNum: 1, pageSize: 5 })
+    notifyList.value = page.list
+    unreadCount.value = Number(page.unreadCount)
+  } catch {
+    // 错误已由拦截器 toast；保持原列表与徽标不清空
+  }
 }
 
 async function onMarkAllRead() {
-  await markAllNotifications()
-  await loadNotifications()
+  try {
+    await markAllNotifications()
+    await loadNotifications()
+  } catch {
+    // 同上，静默即可
+  }
 }
 
-onMounted(() => {
-  if (userStore.isLoggedIn) loadNotifications()
-})
+// 登录状态变化时拉取/清空：覆盖 SPA 内登录成功（onMounted 早已跑过）、退出、401 过期三种转换
+watch(
+  () => userStore.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn) loadNotifications()
+    else {
+      notifyList.value = []
+      unreadCount.value = 0
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -68,7 +85,7 @@ onMounted(() => {
     <div class="actions">
       <template v-if="userStore.isLoggedIn">
         <el-badge :value="unreadCount" :hidden="unreadCount === 0" :max="99">
-          <el-dropdown placement="bottom-end" width="320" @visible-change="(v: boolean) => v && loadNotifications()">
+          <el-dropdown placement="bottom-end" popper-class="notify-popper" @visible-change="(v: boolean) => v && loadNotifications()">
             <span class="notify-trigger">
               <el-icon :size="20"><Bell /></el-icon>
             </span>
@@ -173,5 +190,11 @@ onMounted(() => {
 }
 .notify-dot.unread {
   background: var(--el-color-danger);
+}
+</style>
+<style>
+/* 通知 popper 挂在 body 下，需非 scoped 样式控制宽度 */
+.notify-popper {
+  width: 320px;
 }
 </style>
