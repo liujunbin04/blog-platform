@@ -50,32 +50,37 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (articleService.getById(dto.getArticleId()) == null) {
             throw new BusinessException(404, "文章不存在");
         }
-        // 2. 回复评论：校验父评论存在且属于同一篇文章
-        Long parentId = dto.getParentId() == null ? 0L : dto.getParentId();
-        // 回复目标评论（parentId != 0 时非 null；一级评论保持 null）
-        Comment parent = null;
-        if (parentId != 0) {
-            parent = getById(parentId);
-            if (parent == null) {
-                throw new BusinessException(404, "父评论不存在");
+        // 2. 解析回复目标：replyToId 为空表示一级评论；
+        //    非空时校验目标评论存在且属于同一篇文章，父评论（挂树用）由目标推导：
+        //    目标是一级评论则父评论=目标本身，否则父评论=目标的父评论（统一挂到一级评论下）
+        Comment target = null;
+        if (dto.getReplyToId() != null) {
+            target = getById(dto.getReplyToId());
+            if (target == null) {
+                throw new BusinessException(404, "被回复的评论不存在");
             }
-            if (!parent.getArticleId().equals(dto.getArticleId())) {
-                throw new BusinessException(400, "父评论不属于该文章");
+            if (!target.getArticleId().equals(dto.getArticleId())) {
+                throw new BusinessException(400, "被回复的评论不属于该文章");
             }
         }
+        Long parentId = target == null ? 0L
+                : (target.getParentId() == 0 ? target.getId() : target.getParentId());
         // 3. 插入评论
         Long senderId = SecurityUtil.getCurrentUserId();
         Comment comment = new Comment();
         comment.setArticleId(dto.getArticleId());
         comment.setUserId(senderId);
         comment.setParentId(parentId);
+        comment.setReplyToId(target == null ? 0L : target.getId());
+        comment.setReplyToUserId(target == null ? null : target.getUserId());
         comment.setContent(dto.getContent());
         save(comment);
-        // 4. 通知消息：回复时通知被回复人，一级评论通知文章作者（自己操作自己文章不发）。
+        // 4. 通知消息：回复时通知被回复评论的作者（而非挂树的父评论作者，否则
+        //    回复楼中楼某条评论时通知会发错人），一级评论通知文章作者（自己操作自己文章不发）。
         //    必须在事务提交后再投递：事务内直发的话消息可能先于提交到达消费者，
         //    消费者查库会查不到刚插入的评论
         Article article = articleService.getById(dto.getArticleId());
-        Long recipientId = parent != null ? parent.getUserId() : article.getAuthorId();
+        Long recipientId = target != null ? target.getUserId() : article.getAuthorId();
         if (!recipientId.equals(senderId)) {
             NotificationMessage message = new NotificationMessage(
                     NotificationMessage.TYPE_COMMENT,
@@ -84,13 +89,31 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                     dto.getArticleId(),
                     dto.getContent()
             );
-            String routingKey = parentId != 0
-                    ? RabbitConfig.ROUTING_COMMENT_ADD
-                    : RabbitConfig.ROUTING_COMMENT_ADD; // 当前统一 comment.add；如需区分回复可扩展 reply.add
-            sendAfterCommit(routingKey, message);
+            sendAfterCommit(RabbitConfig.ROUTING_COMMENT_ADD, message);
         }
         // 回读（create_time 由数据库默认值生成，需重新查询才能返回）
-        return CommentVO.from(getById(comment.getId()), currentUser());
+        CommentVO vo = CommentVO.from(getById(comment.getId()), currentUser());
+        // 单条返回也带上被回复人昵称，与评论树接口的展示保持一致
+        if (target != null) {
+            User replyToUser = userService.getById(target.getUserId());
+            vo.setReplyToNickname(replyToUser == null ? null : replyToUser.getNickname());
+        }
+        return vo;
+    }
+
+    @Override
+    @Transactional
+    public void deleteComment(Long id) {
+        Comment comment = getById(id);
+        if (comment == null) {
+            throw new BusinessException(404, "评论不存在");
+        }
+        if (!comment.getUserId().equals(SecurityUtil.getCurrentUserId())) {
+            throw new BusinessException(403, "只能删除自己的评论");
+        }
+        // 逻辑删除：保住评论树结构上下文（子评论回复目标仍可解析出「佚名」），
+        // 父评论被删后其子评论由 buildTree 提升为一级评论，避免整条链消失
+        removeById(id);
     }
 
     /**
@@ -125,14 +148,35 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (comments.isEmpty()) {
             return Collections.emptyList();
         }
+        // 评论者 + 被回复人一次批量查（防 N+1）；被回复人 id 直接存在评论行上，
+        // 被回复的评论被删除后昵称仍可解析
         Set<Long> userIds = comments.stream().map(Comment::getUserId).collect(Collectors.toSet());
+        comments.stream()
+                .map(Comment::getReplyToUserId)
+                .filter(id -> id != null && id != 0)
+                .forEach(userIds::add);
         Map<Long, User> userMap = userService.listByIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, Function.identity()));
 
         List<CommentVO> vos = comments.stream()
                 .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
                 .toList();
+        fillReplyToNicknames(vos, userMap);
         return buildTree(vos);
+    }
+
+    /**
+     * 填充「被回复人昵称」：按 reply_to_user_id 从批量查好的 userMap 取；
+     * 被回复人已注销（逻辑删除）时昵称为 null，前端兜底显示「佚名」
+     */
+    private void fillReplyToNicknames(List<CommentVO> vos, Map<Long, User> userMap) {
+        for (CommentVO vo : vos) {
+            if (vo.getReplyToUserId() == null || vo.getReplyToUserId() == 0) {
+                continue;
+            }
+            User author = userMap.get(vo.getReplyToUserId());
+            vo.setReplyToNickname(author == null ? null : author.getNickname());
+        }
     }
 
     /**

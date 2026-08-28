@@ -25,8 +25,15 @@ public class Comment {
     /** 评论者 id（user.id） */
     private Long userId;
 
-    /** 父评论 id，0 表示一级评论 */
+    /** 父评论 id，0 表示一级评论（多级回复统一挂到所属一级评论下） */
     private Long parentId;
+
+    /** 被回复的评论 id，0 表示一级评论；用于展示「回复@被回复人」与确定通知对象 */
+    private Long replyToId;
+
+    /** 被回复人的用户 id，null 表示一级评论（见 design.md 评论表定义）。
+     *  直接存用户 id：被回复的评论即使被删，回复目标信息仍可解析 */
+    private Long replyToUserId;
 
     /** 评论内容 */
     private String content;

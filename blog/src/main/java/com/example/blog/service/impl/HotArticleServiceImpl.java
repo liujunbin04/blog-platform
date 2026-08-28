@@ -42,9 +42,10 @@ public class HotArticleServiceImpl implements HotArticleService {
 
     @Override
     public void refreshHotArticles() {
-        // 查浏览量 Top N 的已发布文章（MP 自动过滤 deleted=0）
+        // 查浏览量 Top N 的公开文章（已发布且未隐藏；MP 自动过滤 deleted=0）
         List<Article> top = articleService.lambdaQuery()
                 .eq(Article::getStatus, 1)
+                .eq(Article::getHidden, 0)
                 .orderByDesc(Article::getViewCount)
                 .last("LIMIT " + HOT_TOP_N)
                 .list();
@@ -68,6 +69,7 @@ public class HotArticleServiceImpl implements HotArticleService {
             // 兜底：定时任务还没跑过（或正在重建），直接回源数据库
             return articleService.lambdaQuery()
                     .eq(Article::getStatus, 1)
+                    .eq(Article::getHidden, 0)
                     .orderByDesc(Article::getViewCount)
                     .last("LIMIT " + topN)
                     .list().stream().map(Article::getId).toList();
@@ -94,8 +96,11 @@ public class HotArticleServiceImpl implements HotArticleService {
         List<ArticleVO> list = new ArrayList<>();
         for (Long id : ids) {
             Article article = articleMap.get(id);
-            // 文章在两次查询间被删除则跳过
-            if (article == null) {
+            // 文章在两次查询间被删除则跳过；已隐藏的文章在 ZSet 刷新间隙
+            // （最长 5 分钟）可能残留，同样跳过
+            if (article == null
+                    || article.getStatus() == null || article.getStatus() != 1
+                    || (article.getHidden() != null && article.getHidden() == 1)) {
                 continue;
             }
             list.add(ArticleVO.from(article, userMap.get(article.getAuthorId())));

@@ -25,4 +25,9 @@ public interface NotificationService extends IService<Notification> {
      * 当前用户全部标记已读
      */
     void markAllRead();
+
+    /**
+     * 清空当前用户的全部通知（物理删除，不可恢复）
+     */
+    void clearAll();
 }

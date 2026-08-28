@@ -43,6 +43,9 @@ public class Article {
     /** 状态：0 草稿 1 已发布 */
     private Integer status;
 
+    /** 是否隐藏：0 公开 1 隐藏（作者可隐藏自己的已发布文章，他人不可见、不可搜索） */
+    private Integer hidden;
+
     /** 逻辑删除：0 未删除 1 已删除 */
     @TableLogic
     private Integer deleted;

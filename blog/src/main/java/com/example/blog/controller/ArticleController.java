@@ -72,11 +72,29 @@ public class ArticleController {
     }
 
     /**
-     * 删除文章（逻辑删除，仅作者本人）
+     * 删除文章（硬删除：物理删除文章行及其评论/点赞/收藏/通知记录，仅作者本人）
      */
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id) {
         articleService.deleteArticle(id);
+        return Result.success();
+    }
+
+    /**
+     * 隐藏已发布的文章（仅作者本人；他人不可见、不可搜索，可随时重新公开）
+     */
+    @PutMapping("/{id}/hide")
+    public Result<Void> hide(@PathVariable Long id) {
+        articleService.hideArticle(id);
+        return Result.success();
+    }
+
+    /**
+     * 取消隐藏，重新公开（仅作者本人）
+     */
+    @PutMapping("/{id}/unhide")
+    public Result<Void> unhide(@PathVariable Long id) {
+        articleService.unhideArticle(id);
         return Result.success();
     }
 

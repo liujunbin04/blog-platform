@@ -114,4 +114,13 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
                 .eq(Notification::getIsRead, 0)
                 .update();
     }
+
+    @Override
+    @Transactional
+    public void clearAll() {
+        // 物理删除（notification 表无逻辑删除），只删收件人是自己的通知
+        Long userId = SecurityUtil.getCurrentUserId();
+        remove(new LambdaQueryWrapper<Notification>()
+                .eq(Notification::getRecipientId, userId));
+    }
 }

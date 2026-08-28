@@ -6,7 +6,9 @@ import com.example.blog.service.CommentService;
 import com.example.blog.vo.CommentVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,11 +28,20 @@ public class CommentController {
     private final CommentService commentService;
 
     /**
-     * 发表评论 / 回复评论（parentId 为空表示一级评论）
+     * 发表评论 / 回复评论（replyToId 为空表示一级评论）
      */
     @PostMapping
     public Result<CommentVO> add(@Valid @RequestBody CommentDTO dto) {
         return Result.success(commentService.addComment(dto));
+    }
+
+    /**
+     * 删除自己的评论（逻辑删除）
+     */
+    @DeleteMapping("/{id}")
+    public Result<Void> delete(@PathVariable Long id) {
+        commentService.deleteComment(id);
+        return Result.success();
     }
 
     /**

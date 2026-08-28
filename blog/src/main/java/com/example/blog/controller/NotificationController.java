@@ -6,6 +6,7 @@ import com.example.blog.service.NotificationService;
 import com.example.blog.vo.NotificationPageVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +36,15 @@ public class NotificationController {
     @PutMapping("/read-all")
     public Result<Void> readAll() {
         notificationService.markAllRead();
+        return Result.success();
+    }
+
+    /**
+     * 清空全部通知：DELETE /api/notifications（物理删除，不可恢复）
+     */
+    @DeleteMapping
+    public Result<Void> clear() {
+        notificationService.clearAll();
         return Result.success();
     }
 }

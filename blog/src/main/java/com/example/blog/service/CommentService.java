@@ -13,9 +13,14 @@ import java.util.List;
 public interface CommentService extends IService<Comment> {
 
     /**
-     * 发表评论 / 回复评论（parentId 为空表示一级评论）
+     * 发表评论 / 回复评论（replyToId 为空表示一级评论）
      */
     CommentVO addComment(CommentDTO dto);
+
+    /**
+     * 删除自己的评论（逻辑删除）
+     */
+    void deleteComment(Long id);
 
     /**
      * 查询某篇文章的评论树：

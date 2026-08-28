@@ -23,9 +23,19 @@ public interface ArticleService extends IService<Article> {
     ArticleVO updateArticle(Long id, ArticleDTO dto);
 
     /**
-     * 删除文章（逻辑删除，仅作者本人）
+     * 删除文章（硬删除：物理删除文章行及其评论/点赞/收藏/通知记录，仅作者本人）
      */
     void deleteArticle(Long id);
+
+    /**
+     * 隐藏已发布的文章（status 1 → 2，仅作者本人；他人访问详情/列表/搜索均不可见）
+     */
+    void hideArticle(Long id);
+
+    /**
+     * 取消隐藏，重新公开（status 2 → 1，仅作者本人）
+     */
+    void unhideArticle(Long id);
 
     /**
      * 分页查询文章列表（按创建时间倒序 / 按浏览量倒序）

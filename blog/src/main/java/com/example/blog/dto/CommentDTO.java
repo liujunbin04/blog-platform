@@ -14,8 +14,9 @@ public class CommentDTO {
     @NotNull(message = "文章 id 不能为空")
     private Long articleId;
 
-    /** 父评论 id，null 或不传表示发表一级评论 */
-    private Long parentId;
+    /** 被回复的评论 id；null 或不传表示发表一级评论。
+     *  父评论（挂树的一级评论 id）由后端根据它推导，前端无需传 */
+    private Long replyToId;
 
     @NotBlank(message = "评论内容不能为空")
     @Size(max = 1000, message = "评论内容不能超过 1000 个字符")

@@ -22,6 +22,15 @@ public class CommentVO {
     /** 父评论 id，0 表示一级评论 */
     private Long parentId;
 
+    /** 被回复的评论 id，0 表示一级评论 */
+    private Long replyToId;
+
+    /** 被回复人的用户 id，null 表示一级评论（BeanUtils 按同名属性从实体拷贝） */
+    private Long replyToUserId;
+
+    /** 被回复人昵称（一级评论为 null；被回复人已注销时为 null，前端兜底「佚名」） */
+    private String replyToNickname;
+
     private String content;
 
     /** 评论者信息（复用 AuthorVO：id + 昵称 + 头像） */

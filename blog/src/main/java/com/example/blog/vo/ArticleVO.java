@@ -29,6 +29,9 @@ public class ArticleVO {
 
     private Integer status;
 
+    /** 是否隐藏：0 公开 1 隐藏（仅作者可见此状态的文章） */
+    private Integer hidden;
+
     /** 作者信息（关联 user 表） */
     private AuthorVO author;
 

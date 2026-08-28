@@ -1,5 +1,7 @@
 package com.example.blog.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
@@ -22,4 +24,10 @@ public class ArticleDTO {
 
     @Size(max = 255, message = "标签不能超过 255 个字符")
     private String tags;
+
+    /** 保存后的状态：0 存草稿，1 发布；不传默认发布。
+     *  隐藏（2）不走本字段，由独立的隐藏/公开接口维护 */
+    @Min(value = 0, message = "状态仅支持 0 草稿 / 1 发布")
+    @Max(value = 1, message = "状态仅支持 0 草稿 / 1 发布")
+    private Integer status;
 }
