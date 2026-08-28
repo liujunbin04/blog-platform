@@ -12,6 +12,8 @@ export interface ArticleFormData {
   category?: string
   tags?: string
   content: string
+  /** 0 存草稿，1 发布；不传后端默认发布 */
+  status?: number
 }
 
 /** 文章分页列表 */
@@ -49,9 +51,19 @@ export function updateArticle(id: number | string, data: ArticleFormData) {
   return request.put<never, ArticleVO>(`/articles/${id}`, data)
 }
 
-/** 删除文章（仅作者本人） */
+/** 删除文章（硬删除：文章及其评论/点赞/收藏/通知一并物理删除，仅作者本人） */
 export function deleteArticle(id: number | string) {
   return request.delete<never, null>(`/articles/${id}`)
+}
+
+/** 隐藏已发布的文章（仅作者本人，他人不可见、不可搜索） */
+export function hideArticle(id: number | string) {
+  return request.put<never, null>(`/articles/${id}/hide`)
+}
+
+/** 取消隐藏，重新公开 */
+export function unhideArticle(id: number | string) {
+  return request.put<never, null>(`/articles/${id}/unhide`)
 }
 
 /** 热门文章（按浏览量，游客可看） */

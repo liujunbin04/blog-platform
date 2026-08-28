@@ -10,3 +10,8 @@ export function getNotifications(params: { pageNum: number; pageSize: number }) 
 export function markAllNotifications() {
   return request.put<never, null>('/notifications/read-all')
 }
+
+/** 清空全部通知（物理删除，不可恢复） */
+export function clearNotifications() {
+  return request.delete<never, null>('/notifications')
+}

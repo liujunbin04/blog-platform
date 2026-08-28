@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-// 显式 import 的 ElMessage 对 resolver 不可见，样式需手动副作用导入
+import { ElMessage, ElMessageBox } from 'element-plus'
+// 显式 import 的 ElMessage/ElMessageBox 对 resolver 不可见，样式需手动副作用导入
 import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { Bell, ArrowDown, Search } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
-import { getNotifications, markAllNotifications } from '@/api/notification'
+import { clearNotifications, getNotifications, markAllNotifications } from '@/api/notification'
 import type { NotificationVO } from '@/types/api'
 
 const router = useRouter()
@@ -52,6 +53,19 @@ async function onMarkAllRead() {
   }
 }
 
+async function onClearNotifications() {
+  try {
+    await ElMessageBox.confirm('清空后全部通知将被删除且不可恢复，确定清空吗？', '清空确认', {
+      type: 'warning',
+    })
+  } catch {
+    return // 用户取消确认：静默返回
+  }
+  await clearNotifications()
+  ElMessage.success('通知已清空')
+  await loadNotifications()
+}
+
 // 登录状态变化时拉取/清空：覆盖 SPA 内登录成功（onMounted 早已跑过）、退出、401 过期三种转换
 watch(
   () => userStore.isLoggedIn,
@@ -93,9 +107,20 @@ watch(
               <el-dropdown-menu>
                 <div class="notify-head">
                   <span>通知</span>
-                  <el-button v-if="unreadCount > 0" link type="primary" size="small" @click="onMarkAllRead">
-                    全部已读
-                  </el-button>
+                  <span class="notify-head-actions">
+                    <el-button v-if="unreadCount > 0" link type="primary" size="small" @click="onMarkAllRead">
+                      全部已读
+                    </el-button>
+                    <el-button
+                      v-if="notifyList.length > 0"
+                      link
+                      type="danger"
+                      size="small"
+                      @click="onClearNotifications"
+                    >
+                      清空
+                    </el-button>
+                  </span>
                 </div>
                 <el-empty v-if="notifyList.length === 0" description="暂无通知" :image-size="60" />
                 <el-dropdown-item
@@ -175,6 +200,11 @@ watch(
   align-items: center;
   padding: 4px 12px;
   border-bottom: 1px solid var(--el-border-color-lighter);
+}
+.notify-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 .notify-item {
   white-space: normal;

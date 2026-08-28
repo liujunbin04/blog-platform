@@ -22,11 +22,14 @@ const articleId = computed(() =>
 const formRef = ref<FormInstance>()
 const pageLoading = ref(false)
 const saving = ref(false)
+/** 编辑中的文章当前状态（0 草稿 / 1 已发布 / 2 已隐藏），决定「存草稿」按钮是否展示 */
+const loadedStatus = ref(1)
 const form = reactive<ArticleFormData>({
   title: '',
   category: '',
   tags: '',
   content: '',
+  status: 1,
 })
 
 const rules: FormRules = {
@@ -41,6 +44,9 @@ const rules: FormRules = {
 
 const previewHtml = computed(() => md.render(form.content))
 
+/** 存草稿按钮：仅新建、编辑草稿时展示；已发布文章不提供（避免误把已发布文章改回草稿） */
+const showDraftButton = computed(() => !articleId.value || loadedStatus.value === 0)
+
 async function loadForEdit() {
   if (!articleId.value) return
   pageLoading.value = true
@@ -50,22 +56,34 @@ async function loadForEdit() {
     form.category = article.category ?? ''
     form.tags = article.tags ?? ''
     form.content = article.content
+    form.status = article.status
+    loadedStatus.value = article.status
   } finally {
     pageLoading.value = false
   }
 }
 
-async function onSubmit() {
+/**
+ * 保存：status=1 发布 / 0 存草稿。
+ * 草稿保存成功后跳「我的文章」（草稿不在公共列表展示，详情页他人不可见）
+ */
+async function onSubmit(status: 0 | 1) {
   // validate() 在校验失败时 reject：捕获并早退，字段错误提示由表单自行展示
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
   saving.value = true
   try {
+    const payload: ArticleFormData = { ...form, status }
     const saved = articleId.value
-      ? await updateArticle(articleId.value, form)
-      : await publishArticle(form)
-    ElMessage.success(articleId.value ? '更新成功' : '发布成功')
-    await router.push(`/articles/${saved.id}`)
+      ? await updateArticle(articleId.value, payload)
+      : await publishArticle(payload)
+    if (status === 0) {
+      ElMessage.success('草稿已保存')
+      await router.push('/profile')
+    } else {
+      ElMessage.success(articleId.value && loadedStatus.value === 1 ? '更新成功' : '发布成功')
+      await router.push(`/articles/${saved.id}`)
+    }
   } catch {
     // 错误已由拦截器提示
   } finally {
@@ -82,6 +100,8 @@ watch(
       form.category = ''
       form.tags = ''
       form.content = ''
+      form.status = 1
+      loadedStatus.value = 1
     } else if (id !== oldId) {
       loadForEdit()
     }
@@ -92,6 +112,15 @@ watch(
 
 <template>
   <div v-loading="pageLoading" class="article-edit">
+    <!-- 编辑草稿时提示可见性 -->
+    <el-alert
+      v-if="articleId && loadedStatus === 0"
+      class="draft-alert"
+      type="warning"
+      :closable="false"
+      show-icon
+      title="当前是草稿，仅自己可见；点击「发布文章」后才会对外展示"
+    />
     <el-form ref="formRef" :model="form" :rules="rules" label-width="0">
       <el-form-item prop="title">
         <el-input v-model="form.title" size="large" placeholder="文章标题（必填，最多 200 字）" />
@@ -115,15 +144,28 @@ watch(
         </div>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" size="large" :loading="saving" @click="onSubmit">
-          {{ articleId ? '保存修改' : '发布文章' }}
-        </el-button>
+        <div class="submit-row">
+          <el-button v-if="showDraftButton" size="large" :disabled="saving" @click="onSubmit(0)">
+            存草稿
+          </el-button>
+          <el-button type="primary" size="large" :loading="saving" @click="onSubmit(1)">
+            {{ articleId && loadedStatus === 1 ? '保存修改' : '发布文章' }}
+          </el-button>
+        </div>
       </el-form-item>
     </el-form>
   </div>
 </template>
 
 <style scoped>
+.draft-alert {
+  margin-bottom: 16px;
+}
+.submit-row {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+}
 .editor {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -6,7 +6,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 // 显式 import 的 ElMessage/ElMessageBox 对 resolver 不可见，样式需手动副作用导入
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
-import { deleteArticle, getMyArticles } from '@/api/article'
+import { deleteArticle, getMyArticles, hideArticle, unhideArticle } from '@/api/article'
 import { getMyFavorites, unfavoriteArticle } from '@/api/favorite'
 import type { ArticleVO, FavoriteVO } from '@/types/api'
 import { useUserStore } from '@/stores/user'
@@ -34,12 +34,38 @@ async function loadMyArticles() {
 
 async function onDeleteArticle(article: ArticleVO) {
   try {
-    await ElMessageBox.confirm(`确定删除《${article.title}》吗？`, '删除确认', { type: 'warning' })
+    await ElMessageBox.confirm(
+      `删除后《${article.title}》及其评论、点赞、收藏数据将被彻底清除且不可恢复，确定删除吗？`,
+      '删除确认',
+      { type: 'warning' },
+    )
   } catch {
     return // 用户取消确认：静默返回
   }
   await deleteArticle(article.id)
   ElMessage.success('删除成功')
+  await loadMyArticles()
+}
+
+/** 隐藏已发布文章 / 重新公开隐藏文章（草稿不提供该操作） */
+async function onToggleHide(article: ArticleVO) {
+  const hiding = article.hidden !== 1
+  try {
+    await ElMessageBox.confirm(
+      hiding ? `确定隐藏《${article.title}》吗？隐藏后他人不可见、不可搜索。` : `确定重新公开《${article.title}》吗？`,
+      hiding ? '隐藏确认' : '公开确认',
+      { type: 'warning' },
+    )
+  } catch {
+    return // 用户取消确认：静默返回
+  }
+  if (hiding) {
+    await hideArticle(article.id)
+    ElMessage.success('已隐藏')
+  } else {
+    await unhideArticle(article.id)
+    ElMessage.success('已公开')
+  }
   await loadMyArticles()
 }
 
@@ -93,14 +119,23 @@ onMounted(() => {
             </template>
           </el-table-column>
           <el-table-column prop="category" label="分类" width="110" />
+          <el-table-column label="状态" width="90">
+            <template #default="{ row }">
+              <el-tag v-if="row.status === 0" size="small" type="warning">草稿</el-tag>
+              <el-tag v-else-if="row.hidden === 1" size="small" type="info">已隐藏</el-tag>
+              <el-tag v-else size="small" type="success">已发布</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="viewCount" label="浏览量" width="90" />
           <el-table-column prop="likeCount" label="点赞数" width="90" />
           <el-table-column label="发布时间" width="160">
             <template #default="{ row }">{{ formatDateTime(row.createTime) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="140">
+          <el-table-column label="操作" width="180">
             <template #default="{ row }">
               <el-button link type="primary" @click="router.push(`/publish/${row.id}`)">编辑</el-button>
+              <el-button v-if="row.status === 1 && row.hidden !== 1" link type="warning" @click="onToggleHide(row)">隐藏</el-button>
+              <el-button v-else-if="row.status === 1 && row.hidden === 1" link type="success" @click="onToggleHide(row)">公开</el-button>
               <el-button link type="danger" @click="onDeleteArticle(row)">删除</el-button>
             </template>
           </el-table-column>

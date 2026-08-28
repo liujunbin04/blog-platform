@@ -7,7 +7,7 @@ import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
 import { Star, CollectionTag } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
-import { addComment, getCommentTree } from '@/api/comment'
+import { addComment, deleteComment, getCommentTree } from '@/api/comment'
 import { deleteArticle, getArticleDetail } from '@/api/article'
 import { favoriteArticle, getFavoriteStatus, unfavoriteArticle } from '@/api/favorite'
 import { getLikeStatus, likeArticle, unlikeArticle } from '@/api/like'
@@ -105,7 +105,11 @@ async function onToggleFavorite() {
 
 async function onDelete() {
   try {
-    await ElMessageBox.confirm('删除后不可恢复，确定删除该文章吗？', '删除确认', { type: 'warning' })
+    await ElMessageBox.confirm(
+      '删除后文章及其评论、点赞、收藏数据将被彻底清除且不可恢复，确定删除吗？',
+      '删除确认',
+      { type: 'warning' },
+    )
   } catch {
     return // 用户取消确认：静默返回
   }
@@ -127,11 +131,6 @@ function countComments(list: CommentVO[]): number {
   return list.reduce((sum, c) => sum + 1 + countComments(c.children), 0)
 }
 
-/** 回复任意层级评论都挂到其一级父评论下（见任务 Interfaces 的语义约定） */
-function resolveParentId(target: CommentVO): number {
-  return target.parentId === 0 ? target.id : target.parentId
-}
-
 async function onSubmitComment() {
   const content = commentContent.value.trim()
   if (!content) {
@@ -142,7 +141,8 @@ async function onSubmitComment() {
   try {
     await addComment({
       articleId,
-      parentId: replyTo.value ? resolveParentId(replyTo.value) : undefined,
+      // 传实际被回复的评论 id，挂树的父评论由后端推导
+      replyToId: replyTo.value?.id,
       content,
     })
     commentContent.value = ''
@@ -153,6 +153,17 @@ async function onSubmitComment() {
   } finally {
     submitting.value = false
   }
+}
+
+async function onDeleteComment(comment: CommentVO) {
+  try {
+    await ElMessageBox.confirm('确定删除这条评论吗？', '删除确认', { type: 'warning' })
+  } catch {
+    return // 用户取消确认：静默返回
+  }
+  await deleteComment(comment.id)
+  ElMessage.success('删除成功')
+  await loadComments()
 }
 
 onMounted(() => {
@@ -170,6 +181,9 @@ onMounted(() => {
         <div class="meta">
           <span>{{ article.author?.nickname || '佚名' }}</span>
           <el-tag v-if="article.category" size="small" type="info">{{ article.category }}</el-tag>
+          <!-- 非公开状态仅作者本人能看到详情，标注提醒 -->
+          <el-tag v-if="article.status === 0" size="small" type="warning">草稿</el-tag>
+          <el-tag v-else-if="article.hidden === 1" size="small" type="warning">已隐藏</el-tag>
           <span>{{ formatDateTime(article.createTime) }}</span>
           <span>浏览 {{ article.viewCount }}</span>
           <el-tag v-for="tag in (article.tags || '').split(',').filter((t) => t.trim())" :key="tag" size="small">
@@ -214,7 +228,13 @@ onMounted(() => {
           </el-button>
         </div>
         <el-empty v-if="comments.length === 0" description="还没有评论，来抢沙发" :image-size="80" />
-        <CommentItem v-for="c in comments" :key="c.id" :comment="c" @reply="onReply" />
+        <CommentItem
+          v-for="c in comments"
+          :key="c.id"
+          :comment="c"
+          @reply="onReply"
+          @delete="onDeleteComment"
+        />
       </el-card>
     </template>
   </div>

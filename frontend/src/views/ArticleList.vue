@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { View, Star, Histogram } from '@element-plus/icons-vue'
 import { getArticlePage, getHotArticles, searchArticles } from '@/api/article'
 import type { ArticleSearchVO, ArticleVO } from '@/types/api'
@@ -10,6 +10,7 @@ import { formatDateTime, highlightHtml } from '@/utils/format'
 type ListItem = ArticleVO & Partial<Pick<ArticleSearchVO, 'contentSnippet'>>
 
 const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const hotList = ref<ArticleVO[]>([])
@@ -57,9 +58,21 @@ async function load() {
 
 const lastParams = ref('')
 
-/** 条件变化（换排序 / 换每页大小）从第一页重新加载：只改 pageNum，由 watch 统一触发 */
+/** 条件变化（换排序 / 换每页大小 / 换关键词）从第一页重新加载。
+ *  必须显式调用 load()：只改 pageNum 时若已处于第 1 页则不会触发 watch，
+ *  顶部搜索框在列表页发起的搜索就不会刷新（原缺陷） */
 function resetAndLoad() {
   pageNum.value = 1
+  load()
+}
+
+/** 关闭关键词标签：清空关键词并同步去掉 URL query，再重新加载普通列表 */
+function onClearKeyword() {
+  keyword.value = ''
+  if (route.query.keyword !== undefined) {
+    router.replace({ path: '/articles' })
+  }
+  load()
 }
 
 // 用户停留在列表页时再次通过顶部导航搜索：响应 query 变化
@@ -80,11 +93,12 @@ onMounted(load)
 <template>
   <div class="article-list">
     <div class="toolbar">
-      <el-radio-group v-model="sort">
+      <!-- 搜索模式下排序无意义（搜索接口按相关度排序），禁用避免误导 -->
+      <el-radio-group v-model="sort" :disabled="!!keyword.trim()">
         <el-radio-button value="time">最新</el-radio-button>
         <el-radio-button value="hot">最热</el-radio-button>
       </el-radio-group>
-      <el-tag v-if="keyword.trim()" closable @close="resetAndLoad">搜索：{{ keyword }}</el-tag>
+      <el-tag v-if="keyword.trim()" closable @close="onClearKeyword">搜索：{{ keyword }}</el-tag>
     </div>
 
     <div v-if="hotList.length > 0" class="hot-block">
@@ -98,7 +112,10 @@ onMounted(load)
       </ol>
     </div>
 
-    <el-empty v-if="!loading && list.length === 0" description="暂无文章" />
+    <el-empty
+      v-if="!loading && list.length === 0"
+      :description="keyword.trim() ? '未找到相关文章' : '暂无文章'"
+    />
     <div v-loading="loading">
       <el-card
         v-for="item in list"

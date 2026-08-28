@@ -39,6 +39,8 @@ export interface ArticleVO {
   viewCount: number
   likeCount: number
   status: number
+  /** 是否隐藏：0 公开 1 隐藏（仅作者视角会看到隐藏的文章） */
+  hidden: number
   author: AuthorVO | null
   createTime: string
   updateTime: string
@@ -72,11 +74,16 @@ export interface FavoriteVO {
   favoriteTime: string
 }
 
-/** 后端 CommentVO（parentId 为 0 表示一级评论） */
+/** 后端 CommentVO（parentId 为 0 表示一级评论；replyToId 为 0 表示一级评论/未指定） */
 export interface CommentVO {
   id: number
   articleId: number
   parentId: number
+  replyToId: number
+  /** 被回复人用户 id（null 表示一级评论） */
+  replyToUserId: number | null
+  /** 被回复人昵称（一级评论为 null；被回复人已注销时为 null，前端兜底「佚名」） */
+  replyToNickname: string | null
   content: string
   author: AuthorVO | null
   createTime: string
