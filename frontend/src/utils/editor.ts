@@ -106,9 +106,13 @@ export function parseOutline(markdown: string): OutlineItem[] {
     const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line)
     if (!match) return
 
+    const level = match[1]?.length
+    const text = match[2]
+    if (!level || !text) return
+
     outline.push({
-      level: match[1].length,
-      text: match[2],
+      level,
+      text,
       line: index + 1,
     })
   })

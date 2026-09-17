@@ -1,0 +1,73 @@
+:root {
+  --blog-ink: #10273d;
+  --blog-ink-soft: #34485d;
+  --blog-red: #e5593f;
+  --blog-red-dark: #c84630;
+  --blog-moss: #dceae5;
+  --blog-moss-ink: #405e51;
+  --blog-blueprint: #eef3f7;
+  --blog-paper: #ffffff;
+  --blog-line: #cad4df;
+  --blog-line-soft: #e1e7ed;
+  --blog-muted: #68778a;
+  --blog-radius-sm: 4px;
+  --blog-radius-md: 8px;
+  --blog-shadow-sm: 0 6px 18px rgb(16 39 61 / 8%);
+  --blog-shadow-md: 0 18px 45px rgb(16 39 61 / 12%);
+  --blog-content-width: 1180px;
+  --blog-workspace-width: 1440px;
+  --blog-font-display: Georgia, "Noto Serif SC", "Songti SC", serif;
+  --blog-font-body: "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  --blog-font-mono: Consolas, "SFMono-Regular", monospace;
+  --blog-transition: 180ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color: var(--blog-ink);
+  background: var(--blog-blueprint);
+  font-family: var(--blog-font-body);
+  scroll-behavior: smooth;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(var(--blog-line-soft) 1px, transparent 1px) 0 0 / 100% 32px,
+    var(--blog-blueprint);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blog-red);
+  outline-offset: 3px;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
