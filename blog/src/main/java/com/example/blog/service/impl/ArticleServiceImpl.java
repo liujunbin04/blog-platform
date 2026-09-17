@@ -18,6 +18,7 @@ import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
 import com.example.blog.utils.SecurityUtil;
@@ -53,6 +54,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     /** 文章内容缓存（独立 Bean，避免类内自调用导致 @Cacheable 失效） */
     private final ArticleCacheService articleCacheService;
+
+    private final HotArticleService hotArticleService;
 
     /** 浏览量计数：走 Redis 累加，详情页不再同步写数据库 */
     private final ViewCountService viewCountService;
@@ -196,15 +199,23 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     @Override
     public PageResult<ArticleVO> pageArticles(ArticlePageDTO dto) {
+        if ("hot".equalsIgnoreCase(dto.getSort())) {
+            int required = dto.getPageNum() * dto.getPageSize();
+            List<ArticleVO> all = hotArticleService.getHotArticles(required);
+            int from = Math.min((dto.getPageNum() - 1) * dto.getPageSize(), all.size());
+            int to = Math.min(from + dto.getPageSize(), all.size());
+            PageResult<ArticleVO> result = new PageResult<>();
+            result.setList(all.subList(from, to));
+            result.setTotal((long) all.size());
+            result.setPageNum(dto.getPageNum().longValue());
+            result.setPageSize(dto.getPageSize().longValue());
+            return result;
+        }
         LambdaQueryWrapper<Article> wrapper = new LambdaQueryWrapper<>();
         // 列表只展示已发布且未隐藏的文章（草稿、已隐藏均不展示）
         wrapper.eq(Article::getStatus, STATUS_PUBLISHED)
                 .eq(Article::getHidden, 0);
-        if ("hot".equalsIgnoreCase(dto.getSort())) {
-            wrapper.orderByDesc(Article::getViewCount, Article::getCreateTime);
-        } else {
-            wrapper.orderByDesc(Article::getCreateTime);
-        }
+        wrapper.orderByDesc(Article::getCreateTime);
         Page<Article> page = page(new Page<>(dto.getPageNum(), dto.getPageSize()), wrapper);
 
         // 批量查询作者并组装，一次 IN 查询代替逐条查（避免 N+1）

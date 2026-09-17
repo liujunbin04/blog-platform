@@ -12,7 +12,9 @@ import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 浏览量计数实现：Redis 存全量值，定时回写 MySQL
@@ -68,6 +70,24 @@ public class ViewCountServiceImpl implements ViewCountService {
             log.info("浏览量回写 MySQL 完成，共 {} 篇", flushed);
         }
         return flushed;
+    }
+
+    @Override
+    public Map<Long, Long> snapshot() {
+        Map<Long, Long> values = new LinkedHashMap<>();
+        for (String key : scanKeys()) {
+            Long articleId = parseId(key);
+            String raw = stringRedisTemplate.opsForValue().get(key);
+            if (articleId == null || raw == null) {
+                continue;
+            }
+            try {
+                values.put(articleId, Long.parseLong(raw));
+            } catch (NumberFormatException e) {
+                log.warn("跳过非法浏览量值: key={} value={}", key, raw);
+            }
+        }
+        return values;
     }
 
     @Override

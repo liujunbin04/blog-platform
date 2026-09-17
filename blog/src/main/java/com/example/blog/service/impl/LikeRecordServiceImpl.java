@@ -8,6 +8,7 @@ import com.example.blog.dto.NotificationMessage;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.LikeRecord;
 import com.example.blog.mapper.LikeRecordMapper;
+import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
 import com.example.blog.service.LikeRecordService;
 import com.example.blog.utils.SecurityUtil;
@@ -30,6 +31,8 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
 
     private final ArticleService articleService;
 
+    private final ArticleCacheService articleCacheService;
+
     private final RabbitTemplate rabbitTemplate;
 
     @Override
@@ -37,7 +40,7 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
     public void like(Long articleId) {
         // 1. 校验文章存在且公开：草稿 / 已隐藏的文章不可点赞，防止绕过可见性
         Article article = articleService.requirePublicArticle(articleId);
-        Long userId = SecurityUtil.getCurrentUserId();
+        Long userId = currentUserId();
         // 2. 先查后插：常规重复点赞在这里拦截，给出友好提示
         long count = count(new LambdaQueryWrapper<LikeRecord>()
                 .eq(LikeRecord::getUserId, userId)
@@ -62,6 +65,7 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
                 .setSql("like_count = like_count + 1")
                 .eq(Article::getId, articleId)
                 .update();
+        evictArticleCache(articleId);
         // 5. 通知文章作者（自己赞自己文章不发）。事务提交后再投递，
         //    避免消息先于提交到达、消费者查库查不到点赞记录
         if (!article.getAuthorId().equals(userId)) {
@@ -100,7 +104,7 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
         if (articleService.getById(articleId) == null) {
             throw new BusinessException(404, "文章不存在");
         }
-        Long userId = SecurityUtil.getCurrentUserId();
+        Long userId = currentUserId();
         // 1. 物理删除点赞记录。
         //    为什么不用逻辑删除？LikeRecord 没有 @TableLogic —— 若取消点赞只把
         //    deleted 置 1，唯一索引 (user_id, article_id) 仍被占坑，
@@ -116,13 +120,22 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
                 .setSql("like_count = IF(like_count > 0, like_count - 1, 0)")
                 .eq(Article::getId, articleId)
                 .update();
+        evictArticleCache(articleId);
     }
 
     @Override
     @Transactional(readOnly = true)
     public boolean hasLiked(Long articleId) {
         return count(new LambdaQueryWrapper<LikeRecord>()
-                .eq(LikeRecord::getUserId, SecurityUtil.getCurrentUserId())
+                .eq(LikeRecord::getUserId, currentUserId())
                 .eq(LikeRecord::getArticleId, articleId)) > 0;
+    }
+
+    protected Long currentUserId() {
+        return SecurityUtil.getCurrentUserId();
+    }
+
+    void evictArticleCache(Long articleId) {
+        articleCacheService.evict(articleId);
     }
 }

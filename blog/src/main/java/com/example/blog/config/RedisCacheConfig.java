@@ -56,7 +56,7 @@ public class RedisCacheConfig {
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 // 默认过期时间 1 小时
-                .entryTtl(Duration.ofHours(1))
+                .entryTtl(Duration.ofMinutes(10))
                 // key 前缀：缓存名 probe 的 key 形如 blog:cache:probe::1，避免与其他业务 key 冲突
                 .prefixCacheNameWith("blog:cache:")
                 // 不缓存 null：既省空间又防止"查不到的数据"反复击穿缓存
