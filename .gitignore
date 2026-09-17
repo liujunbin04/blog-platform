@@ -1,1 +1,11 @@
 .vscode/
+.idea/
+.claude/
+.workbuddy/
+.superpowers/
+
+# 本地环境变量（含密码与密钥），只提交 .env.example
+.env
+
+# 数据迁移时临时导出的 SQL（可能含真实数据）
+blog_data.sql
