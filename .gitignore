@@ -3,6 +3,7 @@
 .claude/
 .workbuddy/
 .superpowers/
+.worktrees/
 
 # 本地环境变量（含密码与密钥），只提交 .env.example
 .env
