@@ -174,6 +174,23 @@ watch(
       <el-form ref="formRef" :model="form" :rules="rules" class="editor-form">
         <EditorToolbar @apply="applyMarkdown" />
 
+        <nav class="tablet-editor-nav" aria-label="编辑与预览切换">
+          <button
+            type="button"
+            :class="{ active: mobilePanel === 'edit' }"
+            @click="mobilePanel = 'edit'"
+          >
+            编辑
+          </button>
+          <button
+            type="button"
+            :class="{ active: mobilePanel === 'preview' }"
+            @click="mobilePanel = 'preview'"
+          >
+            预览
+          </button>
+        </nav>
+
         <div class="editor-grid" :class="`mobile-panel-${mobilePanel}`">
           <EditorOutline class="desktop-outline" :items="outline" @navigate="navigateToLine" />
 
@@ -398,17 +415,48 @@ watch(
 
 .mobile-outline-panel,
 .mobile-info-panel,
+.tablet-editor-nav,
 .mobile-editor-nav {
   display: none;
 }
 
 @media (max-width: 1199px) {
+  .tablet-editor-nav {
+    display: flex;
+    gap: 6px;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--blog-line);
+    background: var(--blog-blueprint);
+  }
+
+  .tablet-editor-nav button {
+    min-width: 72px;
+    min-height: 32px;
+    border: 1px solid var(--blog-line);
+    background: var(--blog-paper);
+    color: var(--blog-ink-soft);
+  }
+
+  .tablet-editor-nav button.active {
+    border-color: var(--blog-ink);
+    background: var(--blog-ink);
+    color: var(--blog-paper);
+  }
+
   .editor-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .desktop-outline {
     display: none;
+  }
+
+  .preview-panel {
+    display: none;
+  }
+
+  .mobile-panel-preview .preview-panel {
+    display: block;
   }
 }
 
@@ -467,6 +515,10 @@ watch(
     grid-template-columns: repeat(4, 1fr);
     min-height: 54px;
     background: var(--blog-ink);
+  }
+
+  .tablet-editor-nav {
+    display: none;
   }
 
   .mobile-editor-nav button {
