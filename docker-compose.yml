@@ -49,10 +49,9 @@ services:
       - "${MYSQL_PORT:-33306}:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      # 仅当数据卷为空（首次启动）时按文件名字典序执行：
-      # init.sql → migration-2026-08-26.sql → migration-2026-08-28.sql
-      # 已初始化过再改这些脚本不会自动重跑，需要 docker compose down -v 清卷
-      - ./blog/src/main/resources/sql:/docker-entrypoint-initdb.d:ro
+      # 仅挂载最终基线，避免历史迁移在全新数据卷上重复执行。
+      # 历史迁移位于 blog/src/main/resources/sql/migrations/，仅供已有数据库手动升级。
+      - ./blog/src/main/resources/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       # $$ 转义成 $，由容器内 shell 展开环境变量
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
