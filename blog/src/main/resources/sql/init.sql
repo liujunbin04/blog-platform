@@ -48,7 +48,9 @@ CREATE TABLE IF NOT EXISTS `article` (
   `update_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `idx_author` (`author_id`),
-  KEY `idx_status_create` (`status`, `create_time`)
+  KEY `idx_status_create` (`status`, `create_time`),
+  KEY `idx_status_hidden_view` (`status`, `hidden`, `view_count`),
+  KEY `idx_status_hidden_created` (`status`, `hidden`, `create_time`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '文章表';
 
 -- -------------------------------------------------------------
