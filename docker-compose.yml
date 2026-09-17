@@ -206,8 +206,8 @@ services:
       SPRING_ELASTICSEARCH_AUTO_INDEX_CREATION: "true"
 
       # --- JWT ---
-      # application.yml 里是 ${JWT_SECRET:...}，HS512 要求密钥 ≥ 64 字节
-      JWT_SECRET: ${JWT_SECRET:-8792380bd9dcd431ff36509e0f6c47ebc9deb9c5b9800c6fcf39575ac130de9fa886c3db6a6fa7edb3f6c119aec89972f3f84c92a1865688406e928e1c8eadd7}
+      # HS512 要求密钥 ≥ 64 字节。未在 .env 配置时 Compose 直接拒绝启动。
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
     ports:
       # 宿主侧用 18080：既避开动态端口范围（1024-15000），
       # 也留出 8080 给 IDE 里直接跑的 Spring Boot，两者可同时运行

@@ -76,8 +76,8 @@ logging:
 
 # 自定义 JWT 配置（由 JwtProperties 配置类读取，见 config 包）
 jwt:
-  # 签名密钥：生产环境通过 JWT_SECRET 环境变量注入（HS512 要求 ≥64 字节），
-  # 冒号后为开发默认值
-  secret: ${JWT_SECRET:627d361efd9f4feff10aecfe60d3f848773ae6a82660f3eeec0515ad24f2053e9152d3d7b8a7f8f5c285f5c90522c3800642b16cfc80af772a361d018fb35cd4}
+  # 签名密钥：必须通过 JWT_SECRET 环境变量注入（HS512 要求 ≥64 字节）。
+  # 不提供默认值，避免部署时静默使用仓库中的公开密钥。
+  secret: ${JWT_SECRET}
   # 过期时间（毫秒）：86400000 = 24 小时
   expiration: 86400000

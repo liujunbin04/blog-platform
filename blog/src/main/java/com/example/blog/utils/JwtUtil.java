@@ -21,7 +21,15 @@ public class JwtUtil {
     private final long expiration;
 
     public JwtUtil(JwtProperties properties) {
-        this.key = Keys.hmacShaKeyFor(properties.getSecret().getBytes(StandardCharsets.UTF_8));
+        String secret = properties.getSecret();
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("jwt.secret must be configured");
+        }
+        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (keyBytes.length < 64) {
+            throw new IllegalStateException("jwt.secret must contain at least 64 bytes");
+        }
+        this.key = Keys.hmacShaKeyFor(keyBytes);
         this.expiration = properties.getExpiration();
     }
 
