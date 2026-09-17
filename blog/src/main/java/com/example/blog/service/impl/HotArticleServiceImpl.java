@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 public class HotArticleServiceImpl implements HotArticleService {
 
     public static final String HOT_KEY = "hot:articles";
+    public static final String HOT_KEY_TEMP = HOT_KEY + ":building";
 
     /** ZSet 只保留浏览量最高的前 N 篇 */
     public static final int HOT_TOP_N = 100;
@@ -42,24 +43,30 @@ public class HotArticleServiceImpl implements HotArticleService {
 
     @Override
     public void refreshHotArticles() {
-        // 查浏览量 Top N 的公开文章（已发布且未隐藏；MP 自动过滤 deleted=0）
-        List<Article> top = articleService.lambdaQuery()
+        List<Article> top = loadTopArticles();
+        stringRedisTemplate.delete(HOT_KEY_TEMP);
+        for (Article article : top) {
+            stringRedisTemplate.opsForZSet().add(
+                    HOT_KEY_TEMP,
+                    String.valueOf(article.getId()),
+                    article.getViewCount().doubleValue()
+            );
+        }
+        if (top.isEmpty()) {
+            stringRedisTemplate.delete(HOT_KEY);
+        } else {
+            stringRedisTemplate.rename(HOT_KEY_TEMP, HOT_KEY);
+        }
+        log.info("热门文章刷新完成，共 {} 篇", top.size());
+    }
+
+    protected List<Article> loadTopArticles() {
+        return articleService.lambdaQuery()
                 .eq(Article::getStatus, 1)
                 .eq(Article::getHidden, 0)
                 .orderByDesc(Article::getViewCount)
                 .last("LIMIT " + HOT_TOP_N)
                 .list();
-        // DEL + ZADD 重建。窗口期读到空 ZSet 也没关系：
-        // 读取侧 getHotArticleIds 对空 ZSet 有回源数据库兜底
-        stringRedisTemplate.delete(HOT_KEY);
-        for (Article article : top) {
-            stringRedisTemplate.opsForZSet().add(
-                    HOT_KEY,
-                    String.valueOf(article.getId()),
-                    article.getViewCount().doubleValue()
-            );
-        }
-        log.info("热门文章刷新完成，共 {} 篇", top.size());
     }
 
     @Override
