@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS `user` (
 CREATE TABLE IF NOT EXISTS `article` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `title`       VARCHAR(200)    NOT NULL COMMENT '标题',
-  `content`     TEXT            NOT NULL COMMENT '正文',
+  `content`     MEDIUMTEXT      NOT NULL COMMENT '正文',
   `author_id`   BIGINT UNSIGNED NOT NULL COMMENT '作者 id（user.id）',
   `category`    VARCHAR(50)     DEFAULT NULL COMMENT '分类',
   `tags`        VARCHAR(255)    DEFAULT NULL COMMENT '标签，多个以逗号分隔',

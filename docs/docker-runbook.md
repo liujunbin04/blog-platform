@@ -54,6 +54,20 @@ netsh interface ipv4 show excludedportrange protocol=tcp
 
 ---
 
+## 首次配置
+
+Compose 不再提供默认 JWT 密钥。首次启动前：
+
+```powershell
+Copy-Item .env.example .env
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+把生成值写入 `.env` 的 `JWT_SECRET`。未配置时后端和 Compose 会直接拒绝启动。
+
+`init.sql` 是全新数据库的唯一基线。历史迁移脚本位于
+`blog/src/main/resources/sql/migrations/`，只用于已有数据库手动升级。
+
 ## 常用命令
 
 ```bash

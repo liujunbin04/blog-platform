@@ -17,6 +17,7 @@ public class ArticleDTO {
     private String title;
 
     @NotBlank(message = "文章内容不能为空")
+    @Size(max = 2_000_000, message = "文章内容不能超过 2MB")
     private String content;
 
     @Size(max = 50, message = "分类不能超过 50 个字符")
