@@ -1,29 +1,35 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage } from 'element-plus'
-// 显式 import 的 ElMessage 对 resolver 不可见，样式需手动副作用导入
+import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
 import MarkdownIt from 'markdown-it'
-import { getArticleEditData, publishArticle, updateArticle } from '@/api/article'
-import type { ArticleFormData } from '@/api/article'
+
+import { getArticleEditData, publishArticle, updateArticle, type ArticleFormData } from '@/api/article'
+import AppShell from '@/components/AppShell.vue'
+import EditorOutline from '@/components/EditorOutline.vue'
+import EditorToolbar from '@/components/EditorToolbar.vue'
+import {
+  countEditorStats,
+  insertMarkdown,
+  parseOutline,
+  type MarkdownAction,
+} from '@/utils/editor'
 
 const md = new MarkdownIt({ breaks: true })
 
 const route = useRoute()
 const router = useRouter()
-
-/** 有 id 即编辑模式；computed 使 /publish ↔ /publish/:id 互跳时组件复用也能正确切换 */
-const articleId = computed(() =>
-  route.params.id ? (route.params.id as string) : undefined,
-)
+const articleId = computed(() => (route.params.id ? (route.params.id as string) : undefined))
 
 const formRef = ref<FormInstance>()
+const contentTextarea = ref<HTMLTextAreaElement | null>(null)
 const pageLoading = ref(false)
 const saving = ref(false)
-/** 编辑中的文章当前状态（0 草稿 / 1 已发布 / 2 已隐藏），决定「存草稿」按钮是否展示 */
 const loadedStatus = ref(1)
+const cursorPosition = ref(0)
+const mobilePanel = ref<'edit' | 'preview' | 'outline' | 'info'>('edit')
+
 const form = reactive<ArticleFormData>({
   title: '',
   category: '',
@@ -43,12 +49,13 @@ const rules: FormRules = {
 }
 
 const previewHtml = computed(() => md.render(form.content))
-
-/** 存草稿按钮：仅新建、编辑草稿时展示；已发布文章不提供（避免误把已发布文章改回草稿） */
 const showDraftButton = computed(() => !articleId.value || loadedStatus.value === 0)
+const outline = computed(() => parseOutline(form.content))
+const editorStats = computed(() => countEditorStats(form.content, cursorPosition.value))
 
 async function loadForEdit() {
   if (!articleId.value) return
+
   pageLoading.value = true
   try {
     const article = await getArticleEditData(articleId.value)
@@ -63,20 +70,17 @@ async function loadForEdit() {
   }
 }
 
-/**
- * 保存：status=1 发布 / 0 存草稿。
- * 草稿保存成功后跳「我的文章」（草稿不在公共列表展示，详情页他人不可见）
- */
 async function onSubmit(status: 0 | 1) {
-  // validate() 在校验失败时 reject：捕获并早退，字段错误提示由表单自行展示
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
+
   saving.value = true
   try {
     const payload: ArticleFormData = { ...form, status }
     const saved = articleId.value
       ? await updateArticle(articleId.value, payload)
       : await publishArticle(payload)
+
     if (status === 0) {
       ElMessage.success('草稿已保存')
       await router.push('/profile')
@@ -85,17 +89,51 @@ async function onSubmit(status: 0 | 1) {
       await router.push(`/articles/${saved.id}`)
     }
   } catch {
-    // 错误已由拦截器提示
+    // 错误由请求拦截器统一提示。
   } finally {
     saving.value = false
   }
+}
+
+function updateCursor(event: Event) {
+  cursorPosition.value = (event.target as HTMLTextAreaElement).selectionStart
+}
+
+async function applyMarkdown(action: MarkdownAction) {
+  const textarea = contentTextarea.value
+  if (!textarea) return
+
+  const result = insertMarkdown(
+    form.content,
+    textarea.selectionStart,
+    textarea.selectionEnd,
+    action,
+  )
+  form.content = result.value
+
+  await nextTick()
+  textarea.focus()
+  textarea.setSelectionRange(result.selectionStart, result.selectionEnd)
+  cursorPosition.value = result.selectionEnd
+  mobilePanel.value = 'edit'
+}
+
+async function navigateToLine(line: number) {
+  const textarea = contentTextarea.value
+  if (!textarea) return
+
+  const lines = form.content.split('\n')
+  const offset = lines.slice(0, line - 1).join('\n').length + (line > 1 ? 1 : 0)
+  textarea.focus()
+  textarea.setSelectionRange(offset, offset)
+  cursorPosition.value = offset
+  mobilePanel.value = 'edit'
 }
 
 watch(
   articleId,
   (id, oldId) => {
     if (!id) {
-      // 进入新建模式：清空上一次编辑残留
       form.title = ''
       form.category = ''
       form.tags = ''
@@ -111,81 +149,340 @@ watch(
 </script>
 
 <template>
-  <div v-loading="pageLoading" class="article-edit">
-    <!-- 编辑草稿时提示可见性 -->
-    <el-alert
-      v-if="articleId && loadedStatus === 0"
-      class="draft-alert"
-      type="warning"
-      :closable="false"
-      show-icon
-      title="当前是草稿，仅自己可见；点击「发布文章」后才会对外展示"
-    />
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="0">
-      <el-form-item prop="title">
-        <el-input v-model="form.title" size="large" placeholder="文章标题（必填，最多 200 字）" />
-      </el-form-item>
-      <el-form-item prop="category">
-        <el-input v-model="form.category" placeholder="分类（选填，如：技术 / 生活）" style="max-width: 240px" />
-      </el-form-item>
-      <el-form-item prop="tags">
-        <el-input v-model="form.tags" placeholder="标签（选填，英文逗号分隔，如：vue,spring）" style="max-width: 360px" />
-      </el-form-item>
-      <el-form-item prop="content">
-        <div class="editor">
-          <el-input
-            v-model="form.content"
-            type="textarea"
-            class="editor-input"
-            :autosize="{ minRows: 20, maxRows: 30 }"
-            placeholder="支持 Markdown 语法…"
-          />
-          <div class="editor-preview markdown-body" v-html="previewHtml" />
+  <AppShell variant="workspace">
+    <div v-loading="pageLoading" class="editor-app">
+      <header class="document-bar">
+        <el-button link @click="router.back()">返回</el-button>
+        <span class="document-state">{{ articleId ? 'EDITING' : 'DRAFT' }}</span>
+        <strong class="document-title">{{ form.title || '未命名文章' }}</strong>
+        <span class="document-count">{{ editorStats.characters }} 字</span>
+        <el-button v-if="showDraftButton" :disabled="saving" @click="onSubmit(0)">存草稿</el-button>
+        <el-button type="primary" :loading="saving" @click="onSubmit(1)">
+          {{ articleId && loadedStatus === 1 ? '保存修改' : '发布文章' }}
+        </el-button>
+      </header>
+
+      <el-alert
+        v-if="articleId && loadedStatus === 0"
+        class="draft-alert"
+        type="warning"
+        :closable="false"
+        show-icon
+        title="当前是草稿，仅自己可见；发布后才会对外展示"
+      />
+
+      <el-form ref="formRef" :model="form" :rules="rules" class="editor-form">
+        <EditorToolbar @apply="applyMarkdown" />
+
+        <div class="editor-grid" :class="`mobile-panel-${mobilePanel}`">
+          <EditorOutline class="desktop-outline" :items="outline" @navigate="navigateToLine" />
+
+          <section class="document-panel">
+            <div class="metadata-fields">
+              <el-form-item prop="title" class="title-field">
+                <el-input
+                  v-model="form.title"
+                  size="large"
+                  maxlength="200"
+                  placeholder="文章标题"
+                  aria-label="文章标题"
+                />
+              </el-form-item>
+              <el-form-item prop="category">
+                <el-input v-model="form.category" placeholder="分类" aria-label="文章分类" />
+              </el-form-item>
+              <el-form-item prop="tags">
+                <el-input
+                  v-model="form.tags"
+                  placeholder="标签，使用英文逗号分隔"
+                  aria-label="文章标签"
+                />
+              </el-form-item>
+            </div>
+
+            <el-form-item prop="content" class="content-field">
+              <textarea
+                ref="contentTextarea"
+                v-model="form.content"
+                class="markdown-input"
+                placeholder="使用 Markdown 开始写作"
+                aria-label="Markdown 正文"
+                @blur="updateCursor"
+                @select="updateCursor"
+                @click="updateCursor"
+                @keyup="updateCursor"
+              />
+            </el-form-item>
+          </section>
+
+          <section class="preview-panel">
+            <div class="panel-label">PREVIEW</div>
+            <div class="editor-preview markdown-body" v-html="previewHtml" />
+          </section>
+
+          <section class="mobile-outline-panel">
+            <EditorOutline :items="outline" @navigate="navigateToLine" />
+          </section>
+
+          <section class="mobile-info-panel">
+            <div class="panel-label">DOCUMENT</div>
+            <p>分类：{{ form.category || '未分类' }}</p>
+            <p>标签：{{ form.tags || '暂无标签' }}</p>
+            <p>状态：{{ form.status === 0 ? '草稿' : '已发布' }}</p>
+          </section>
         </div>
-      </el-form-item>
-      <el-form-item>
-        <div class="submit-row">
-          <el-button v-if="showDraftButton" size="large" :disabled="saving" @click="onSubmit(0)">
-            存草稿
-          </el-button>
-          <el-button type="primary" size="large" :loading="saving" @click="onSubmit(1)">
-            {{ articleId && loadedStatus === 1 ? '保存修改' : '发布文章' }}
-          </el-button>
-        </div>
-      </el-form-item>
-    </el-form>
-  </div>
+      </el-form>
+
+      <footer class="status-bar">
+        <span>{{ editorStats.characters }} 字</span>
+        <span>行 {{ editorStats.line }}，列 {{ editorStats.column }}</span>
+        <span>UTF-8</span>
+        <span>Markdown</span>
+      </footer>
+
+      <nav class="mobile-editor-nav" aria-label="编辑器面板">
+        <button
+          type="button"
+          :class="{ active: mobilePanel === 'edit' }"
+          @click="mobilePanel = 'edit'"
+        >
+          编辑
+        </button>
+        <button
+          type="button"
+          :class="{ active: mobilePanel === 'preview' }"
+          @click="mobilePanel = 'preview'"
+        >
+          预览
+        </button>
+        <button
+          type="button"
+          :class="{ active: mobilePanel === 'outline' }"
+          @click="mobilePanel = 'outline'"
+        >
+          大纲
+        </button>
+        <button
+          type="button"
+          :class="{ active: mobilePanel === 'info' }"
+          @click="mobilePanel = 'info'"
+        >
+          信息
+        </button>
+      </nav>
+    </div>
+  </AppShell>
 </template>
 
 <style scoped>
-.draft-alert {
-  margin-bottom: 16px;
+.editor-app {
+  border: 1px solid var(--blog-line);
+  background: var(--blog-paper);
+  box-shadow: var(--blog-shadow-sm);
 }
-.submit-row {
+
+.document-bar {
+  min-height: 54px;
   display: flex;
-  gap: 12px;
-  width: 100%;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  background: var(--blog-ink);
+  color: var(--blog-paper);
 }
-.editor {
+
+.document-state,
+.document-count,
+.panel-label {
+  color: #a9becc;
+  font-family: var(--blog-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+.document-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-count {
+  margin-left: auto;
+}
+
+.draft-alert {
+  margin: 0;
+}
+
+.editor-form {
+  display: block;
+}
+
+.editor-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: 190px minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 620px;
+}
+
+.document-panel,
+.preview-panel {
+  min-width: 0;
+  padding: 20px 24px;
+}
+
+.document-panel {
+  border-right: 1px solid var(--blog-line);
+}
+
+.preview-panel {
+  background: #f9fbfc;
+}
+
+.metadata-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(120px, 0.7fr) minmax(160px, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.metadata-fields :deep(.el-form-item),
+.content-field {
+  margin-bottom: 0;
+}
+
+.metadata-fields :deep(.el-form-item__error) {
+  position: static;
+}
+
+.title-field :deep(input) {
+  font-family: var(--blog-font-display);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.content-field :deep(.el-form-item__content) {
+  display: block;
+}
+
+.markdown-input {
   width: 100%;
+  min-height: 520px;
+  padding: 8px 2px;
+  border: 0;
+  outline: 0;
+  color: var(--blog-ink-soft);
+  background: transparent;
+  font-family: var(--blog-font-mono);
+  font-size: 13px;
+  line-height: 1.9;
+  resize: vertical;
 }
-.editor-input :deep(.el-textarea__inner) {
-  height: 100%;
-  font-family: Consolas, Monaco, monospace;
-}
+
 .editor-preview {
-  min-height: 480px;
-  padding: 12px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 4px;
-  overflow-wrap: break-word;
+  min-height: 520px;
 }
-@media (max-width: 900px) {
-  .editor {
+
+.status-bar {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 0 14px;
+  border-top: 1px solid var(--blog-line);
+  background: var(--blog-blueprint);
+  color: var(--blog-muted);
+  font-family: var(--blog-font-mono);
+  font-size: 9px;
+}
+
+.mobile-outline-panel,
+.mobile-info-panel,
+.mobile-editor-nav {
+  display: none;
+}
+
+@media (max-width: 1199px) {
+  .editor-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .desktop-outline {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .document-bar {
+    flex-wrap: wrap;
+    padding-block: 8px;
+  }
+
+  .document-title {
+    flex: 1;
+  }
+
+  .document-count {
+    display: none;
+  }
+
+  .editor-grid {
+    display: block;
+    min-height: 560px;
+    padding-bottom: 56px;
+  }
+
+  .document-panel,
+  .preview-panel,
+  .mobile-outline-panel,
+  .mobile-info-panel {
+    display: none;
+    padding: 16px;
+  }
+
+  .metadata-fields {
     grid-template-columns: 1fr;
+  }
+
+  .mobile-panel-edit .document-panel,
+  .mobile-panel-preview .preview-panel,
+  .mobile-panel-outline .mobile-outline-panel,
+  .mobile-panel-info .mobile-info-panel {
+    display: block;
+  }
+
+  .mobile-outline-panel :deep(.editor-outline) {
+    padding: 0;
+    border-right: 0;
+    background: transparent;
+  }
+
+  .mobile-editor-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    min-height: 54px;
+    background: var(--blog-ink);
+  }
+
+  .mobile-editor-nav button {
+    min-height: 54px;
+    border: 0;
+    background: transparent;
+    color: #b8c9d7;
+  }
+
+  .mobile-editor-nav button.active {
+    color: var(--blog-paper);
+    box-shadow: inset 0 -2px var(--blog-red);
+  }
+
+  .status-bar {
+    display: none;
   }
 }
 </style>
