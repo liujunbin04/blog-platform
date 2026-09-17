@@ -54,8 +54,8 @@ function isMine(comment: CommentVO): boolean {
 
 <style scoped>
 .comment-item {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--blog-line-soft);
 }
 .head {
   display: flex;
@@ -63,22 +63,24 @@ function isMine(comment: CommentVO): boolean {
   gap: 8px;
 }
 .nickname {
-  font-weight: 500;
+  font-weight: 700;
 }
 .reply-to {
-  color: var(--el-color-primary);
-  font-size: 13px;
+  color: var(--blog-red);
+  font-size: 12px;
 }
 .time {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+  color: var(--blog-muted);
+  font-family: var(--blog-font-mono);
+  font-size: 10px;
 }
 .actions {
   margin-left: auto;
   display: inline-flex;
 }
 .content {
-  margin: 8px 0 0 36px;
+  margin: 9px 0 0 36px;
+  line-height: 1.75;
   white-space: pre-wrap;
 }
 .children {
@@ -86,5 +88,17 @@ function isMine(comment: CommentVO): boolean {
 }
 .deep .children {
   margin-left: 0;
+}
+
+@media (max-width: 767px) {
+  .head {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    flex-basis: 100%;
+    margin-left: 36px;
+  }
 }
 </style>
