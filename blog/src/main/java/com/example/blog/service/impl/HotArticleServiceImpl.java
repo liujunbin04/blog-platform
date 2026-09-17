@@ -71,7 +71,9 @@ public class HotArticleServiceImpl implements HotArticleService {
 
     @Override
     public List<Long> getHotArticleIds(int topN) {
-        Set<String> ids = stringRedisTemplate.opsForZSet().reverseRange(HOT_KEY, 0, topN - 1L);
+        int candidateSize = Math.max(topN, topN * 3);
+        Set<String> ids = stringRedisTemplate.opsForZSet()
+                .reverseRange(HOT_KEY, 0, candidateSize - 1L);
         if (ids == null || ids.isEmpty()) {
             // 兜底：定时任务还没跑过（或正在重建），直接回源数据库
             return articleService.lambdaQuery()
@@ -102,6 +104,9 @@ public class HotArticleServiceImpl implements HotArticleService {
 
         List<ArticleVO> list = new ArrayList<>();
         for (Long id : ids) {
+            if (list.size() >= topN) {
+                break;
+            }
             Article article = articleMap.get(id);
             // 文章在两次查询间被删除则跳过；已隐藏的文章在 ZSet 刷新间隙
             // （最长 5 分钟）可能残留，同样跳过

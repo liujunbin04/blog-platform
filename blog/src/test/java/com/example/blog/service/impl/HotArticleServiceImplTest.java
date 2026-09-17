@@ -12,7 +12,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
 
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
@@ -56,5 +59,19 @@ class HotArticleServiceImplTest {
                 HotArticleServiceImpl.HOT_KEY_TEMP,
                 HotArticleServiceImpl.HOT_KEY
         );
+    }
+
+    @Test
+    void readsMoreCandidatesThanRequested() {
+        when(stringRedisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(zSetOperations.reverseRange(
+                HotArticleServiceImpl.HOT_KEY,
+                0,
+                2L
+        )).thenReturn(new LinkedHashSet<>(List.of("9", "8", "7")));
+
+        List<Long> ids = service.getHotArticleIds(1);
+
+        assertEquals(List.of(9L, 8L, 7L), ids);
     }
 }
