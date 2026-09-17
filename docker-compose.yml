@@ -1,0 +1,266 @@
+# 博客平台一体化编排
+#
+# 用法：
+#   cp .env.example .env        # 可选，不建 .env 就走下面的开发默认值
+#   docker compose up -d --build
+#   docker compose ps           # 全部 healthy 后访问 http://localhost
+#
+# 容器之间一律用「服务名 + 容器端口」互访（mysql:3306 / redis:6379 /
+# elasticsearch:9200 / rabbitmq:5672），与宿主机映射端口无关。
+# 宿主机端口统一做了偏移，目的是避开 Windows Hyper-V 的动态保留端口段
+# （本机当前保留段：3336、5357、11838-12437、50000-50059，重启后会变）。
+
+name: blog-platform
+
+# 统一的日志策略，各服务用 logging: *default-logging 引用。
+# Docker 默认 json-file 驱动不限制大小，服务长期开着日志会无限增长撑爆磁盘。
+# 这里每个容器最多留 3 个 10MB 的文件，超出后滚动覆盖。
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+
+  # ===========================================================================
+  # 基础设施
+  # ===========================================================================
+
+  mysql:
+    image: mysql:8.4
+    container_name: blog-mysql
+    restart: unless-stopped
+    # 注意：MySQL 8.4 已移除 --default-authentication-plugin 参数，别加回去
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+08:00
+      - --max_connections=200
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-blog_dev_pwd}
+    ports:
+      # 宿主端口必须 > 15000：本机 IPv4 动态端口范围是 1024-15000
+      # （netsh int ipv4 show dynamicport tcp），落在里面的端口会被 Hyper-V 随机保留，
+      # 13306 就曾因此绑定失败（落在 13208-13307 段内）。
+      # 33060 是本地 MySQL 的 X Plugin 默认端口，也会被占，故用 33306。
+      # 容器端口固定 3306，改左侧不影响容器间互访。
+      - "${MYSQL_PORT:-33306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # 仅当数据卷为空（首次启动）时按文件名字典序执行：
+      # init.sql → migration-2026-08-26.sql → migration-2026-08-28.sql
+      # 已初始化过再改这些脚本不会自动重跑，需要 docker compose down -v 清卷
+      - ./blog/src/main/resources/sql:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # $$ 转义成 $，由容器内 shell 展开环境变量
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    logging: *default-logging
+    networks:
+      - blog-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: blog-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      # 上生产请打开下面两行，并同步给后端配 SPRING_DATA_REDIS_PASSWORD
+      # - --requirepass
+      # - "${REDIS_PASSWORD:-}"
+    ports:
+      # 6379 在本机动态端口范围内（1024-15000），会被 Hyper-V 随机保留，故用 16379
+      - "${REDIS_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    logging: *default-logging
+    networks:
+      - blog-net
+
+  elasticsearch:
+    # 官方镜像没有 IK 中文分词插件，ArticleDocument 用到了 ik_max_word / ik_smart，
+    # 不装的话后端自动建索引会失败并导致启动失败。构建配置见 docker/elasticsearch/Dockerfile
+    build:
+      context: ./docker/elasticsearch
+    image: blog-elasticsearch:8.17.4-ik
+    container_name: blog-elasticsearch
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      # 单节点模式，跳过生产环境的多节点引导检查
+      discovery.type: single-node
+      # 关闭安全认证：后端 application.yml 里没配 ES 用户名密码，这样零改动就能连通。
+      # 上生产请改成 true，并给后端注入 SPRING_ELASTICSEARCH_USERNAME / PASSWORD
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+      # 单节点下采集监控数据纯属浪费
+      xpack.monitoring.collection.enabled: "false"
+      # 堆大小别超过物理内存一半，也不要超过 31GB（压缩指针失效阈值）。
+      # 下限给 256m、上限 512m：本机数据量很小，让 ES 按需增长而不是一上来就占满
+      ES_JAVA_OPTS: "-Xms256m -Xmx512m"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "${ES_PORT:-19200}:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      # 单节点集群没有副本分片，yellow 就是正常状态，别只认 green
+      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
+    logging: *default-logging
+    networks:
+      - blog-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: blog-rabbitmq
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      # 5672 在本机动态端口范围内（1024-15000），宿主侧改用 56720
+      - "${RABBITMQ_PORT:-56720}:5672"
+      - "${RABBITMQ_MGMT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    logging: *default-logging
+    networks:
+      - blog-net
+
+  # ===========================================================================
+  # 应用
+  # ===========================================================================
+
+  backend:
+    build:
+      context: ./blog
+      dockerfile: Dockerfile
+    image: blog-backend:latest
+    container_name: blog-backend
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      # 开发/自托管场景下 512m 足够（实测常驻约 300-400MB）。
+      # 若出现 OutOfMemoryError，把上限调回 768m 即可
+      JAVA_OPTS: "-Xms256m -Xmx512m"
+
+      # --- MySQL ---
+      # Spring Boot 环境变量优先级高于 application.yml，
+      # 这里的值会覆盖 yml 里写死的 localhost:3306
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/blog?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-blog_dev_pwd}
+      # application.yml 里 datasource.password 写的是 ${DB_PASSWORD:123456}，
+      # 一并注入，保证那个占位符也解析到正确的值
+      DB_PASSWORD: ${MYSQL_ROOT_PASSWORD:-blog_dev_pwd}
+
+      # --- Redis ---
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: "6379"
+      SPRING_DATA_REDIS_DATABASE: "0"
+
+      # --- RabbitMQ ---
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: "5672"
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+
+      # --- Elasticsearch ---
+      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
+      # 启动时按 ArticleDocument 注解自动建索引；
+      # 关掉的话索引不存在，搜索永远返回空
+      SPRING_ELASTICSEARCH_AUTO_INDEX_CREATION: "true"
+
+      # --- JWT ---
+      # application.yml 里是 ${JWT_SECRET:...}，HS512 要求密钥 ≥ 64 字节
+      JWT_SECRET: ${JWT_SECRET:-8792380bd9dcd431ff36509e0f6c47ebc9deb9c5b9800c6fcf39575ac130de9fa886c3db6a6fa7edb3f6c119aec89972f3f84c92a1865688406e928e1c8eadd7}
+    ports:
+      # 宿主侧用 18080：既避开动态端口范围（1024-15000），
+      # 也留出 8080 给 IDE 里直接跑的 Spring Boot，两者可同时运行
+      - "${BACKEND_PORT:-18080}:8080"
+    # 等所有依赖真正 available 再启动，避免 Spring 启动时连不上就退出。
+    # 只写 depends_on 不写 condition 的话只保证「容器已创建」，不保证「服务已就绪」
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - blog-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # 构建期参数：会被 Vite 内联进产物。改了必须 docker compose build --no-cache 重建
+        VITE_API_BASE: ${VITE_API_BASE:-/api}
+    image: blog-frontend:latest
+    container_name: blog-frontend
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    logging: *default-logging
+    networks:
+      - blog-net
+
+# =============================================================================
+# 网络与数据卷
+# =============================================================================
+
+networks:
+  # 独立的 bridge 网络：六个服务互相可见，与宿主机上其他 compose 项目隔离
+  blog-net:
+    driver: bridge
+
+volumes:
+  # 具名卷由 Docker 管理存储位置，在 Docker Desktop + WSL2 下
+  # 比绑定挂载到 Windows 目录性能好得多，也没有文件权限问题
+  mysql_data:
+  redis_data:
+  es_data:
+  rabbitmq_data:

@@ -1,0 +1,18 @@
+# 宿主机的依赖与产物：容器里会重新 npm ci 和 vite build
+node_modules/
+dist/
+dist-ssr/
+coverage/
+
+# 缓存与临时文件
+.eslintcache
+*.timestamp-*.mjs
+*.tsbuildinfo
+*.log
+
+# 版本控制与 IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+*.local

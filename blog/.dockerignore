@@ -1,0 +1,18 @@
+# 构建产物：由容器内 Maven 重新编译，宿主机的 target 既可能是旧的也可能 JDK 版本不对
+target/
+.mvn/
+mvnw
+mvnw.cmd
+
+# 版本控制与 IDE
+.git/
+.gitignore
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+
+# 杂项
+*.log
+.DS_Store
