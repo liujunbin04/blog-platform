@@ -1,95 +1,123 @@
-/* Markdown 渲染区全局样式：详情页正文与编辑页预览共用。
-   颜色一律取 Element Plus CSS 变量，跟随亮暗主题 */
+.markdown-body {
+  color: var(--blog-ink-soft);
+  overflow-wrap: anywhere;
+}
+
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4 {
-  margin: 24px 0 12px;
-  line-height: 1.4;
+  margin: 34px 0 14px;
+  color: var(--blog-ink);
+  font-family: var(--blog-font-display);
+  line-height: 1.35;
 }
+
 .markdown-body h1 {
-  font-size: 1.6em;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--blog-line);
+  font-size: 2em;
 }
+
 .markdown-body h2 {
-  font-size: 1.35em;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--el-border-color-extra-light);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--blog-line-soft);
+  font-size: 1.55em;
 }
+
 .markdown-body h3 {
-  font-size: 1.15em;
+  font-size: 1.25em;
 }
-.markdown-body p {
-  margin: 12px 0;
+
+.markdown-body p,
+.markdown-body ul,
+.markdown-body ol {
+  margin: 16px 0;
 }
+
+.markdown-body ul,
+.markdown-body ol {
+  padding-left: 28px;
+}
+
+.markdown-body li + li {
+  margin-top: 7px;
+}
+
 .markdown-body blockquote {
-  margin: 12px 0;
-  padding: 8px 16px;
-  border-left: 4px solid var(--el-color-primary-light-5);
-  background: var(--el-fill-color-light);
-  color: var(--el-text-color-regular);
-  border-radius: 0 4px 4px 0;
+  margin: 24px 0;
+  padding: 14px 18px;
+  border-left: 3px solid var(--blog-red);
+  background: var(--blog-blueprint);
+  color: var(--blog-ink);
+  font-family: var(--blog-font-display);
 }
+
 .markdown-body blockquote p {
   margin: 4px 0;
 }
-.markdown-body ul,
-.markdown-body ol {
-  margin: 12px 0;
-  padding-left: 28px;
-}
-.markdown-body li {
-  margin: 4px 0;
-}
+
 .markdown-body table {
-  margin: 12px 0;
-  border-collapse: collapse;
   width: 100%;
+  margin: 22px 0;
+  border-collapse: collapse;
   font-size: 14px;
 }
+
 .markdown-body th,
 .markdown-body td {
-  border: 1px solid var(--el-border-color-lighter);
-  padding: 8px 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--blog-line);
   text-align: left;
 }
+
 .markdown-body th {
-  background: var(--el-fill-color-light);
-  font-weight: 600;
+  background: var(--blog-blueprint);
 }
+
 .markdown-body tr:nth-child(2n) td {
-  background: var(--el-fill-color-lighter);
+  background: #f8fafb;
 }
+
 .markdown-body hr {
-  border: none;
-  border-top: 1px solid var(--el-border-color-lighter);
-  margin: 20px 0;
+  margin: 30px 0;
+  border: 0;
+  border-top: 1px solid var(--blog-line);
 }
+
 .markdown-body a {
-  color: var(--el-color-primary);
+  color: var(--blog-red);
   text-decoration: none;
 }
+
 .markdown-body a:hover {
   text-decoration: underline;
 }
+
 .markdown-body img {
   max-width: 100%;
-  border-radius: 4px;
+  border-radius: var(--blog-radius-sm);
 }
+
 .markdown-body pre {
-  background: var(--el-fill-color-light);
-  padding: 12px;
-  border-radius: 4px;
+  margin: 22px 0;
+  padding: 16px;
+  border: 1px solid #263f56;
+  background: var(--blog-ink);
+  color: #dce7f0;
   overflow-x: auto;
 }
+
 .markdown-body code {
-  background: var(--el-fill-color-light);
-  padding: 2px 4px;
-  border-radius: 3px;
+  padding: 2px 5px;
+  background: var(--blog-blueprint);
+  color: var(--blog-red-dark);
+  font-family: var(--blog-font-mono);
   font-size: 0.92em;
 }
+
 .markdown-body pre code {
   padding: 0;
   background: transparent;
+  color: inherit;
 }
