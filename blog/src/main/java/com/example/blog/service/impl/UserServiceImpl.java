@@ -11,6 +11,7 @@ import com.example.blog.utils.JwtUtil;
 import com.example.blog.vo.LoginVO;
 import com.example.blog.vo.UserVO;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -48,7 +49,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setEmail(dto.getEmail());
         // 昵称未填时默认使用用户名
         user.setNickname(StringUtils.hasText(dto.getNickname()) ? dto.getNickname() : dto.getUsername());
-        save(user);
+        try {
+            save(user);
+        } catch (DuplicateKeyException e) {
+            // 并发注册绕过前面的查重时，由唯一索引兜底并转成友好提示
+            throw new BusinessException(400, "用户名或邮箱已被注册");
+        }
 
         return UserVO.from(user);
     }

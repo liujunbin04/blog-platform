@@ -6,6 +6,7 @@ import com.example.blog.vo.ArticleVO;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Update;
 
 /**
  * 文章 Mapper
@@ -25,4 +26,12 @@ public interface ArticleMapper extends BaseMapper<Article> {
      */
     @Delete("DELETE FROM article WHERE id = #{id}")
     int hardDeleteById(@Param("id") Long id);
+
+    /**
+     * 把浏览量直接设为指定值（定时任务回写用）
+     * <p>用绝对值覆盖而非累加：Redis 里存的是全量值，数据库只是定期落盘的副本。
+     * 若用 SET view_count = view_count + N，一旦回写任务重复执行就会重复累加</p>
+     */
+    @Update("UPDATE article SET view_count = #{count} WHERE id = #{id}")
+    int updateViewCount(@Param("id") Long id, @Param("count") long count);
 }

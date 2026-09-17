@@ -58,4 +58,10 @@ public interface ArticleService extends IService<Article> {
      * 注意必须通过代理调用（controller / 其他 service），类内部调用缓存不生效
      */
     ArticleVO getArticleById(Long id);
+
+    /**
+     * 校验文章存在且对外公开（已发布、未隐藏），否则按「文章不存在」抛 404。
+     * 评论 / 点赞 / 收藏等公开互动入口统一走这里，防止草稿和已隐藏文章被交互
+     */
+    Article requirePublicArticle(Long id);
 }

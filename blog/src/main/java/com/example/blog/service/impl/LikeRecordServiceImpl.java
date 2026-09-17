@@ -35,10 +35,8 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
     @Override
     @Transactional
     public void like(Long articleId) {
-        // 1. 校验文章存在（MP 自动过滤已删除文章）
-        if (articleService.getById(articleId) == null) {
-            throw new BusinessException(404, "文章不存在");
-        }
+        // 1. 校验文章存在且公开：草稿 / 已隐藏的文章不可点赞，防止绕过可见性
+        Article article = articleService.requirePublicArticle(articleId);
         Long userId = SecurityUtil.getCurrentUserId();
         // 2. 先查后插：常规重复点赞在这里拦截，给出友好提示
         long count = count(new LambdaQueryWrapper<LikeRecord>()
@@ -66,8 +64,7 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
                 .update();
         // 5. 通知文章作者（自己赞自己文章不发）。事务提交后再投递，
         //    避免消息先于提交到达、消费者查库查不到点赞记录
-        Article article = articleService.getById(articleId);
-        if (article != null && !article.getAuthorId().equals(userId)) {
+        if (!article.getAuthorId().equals(userId)) {
             NotificationMessage message = new NotificationMessage(
                     NotificationMessage.TYPE_LIKE,
                     article.getAuthorId(),

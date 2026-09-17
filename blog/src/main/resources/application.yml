@@ -28,6 +28,17 @@ spring:
     port: 5672
     username: guest
     password: guest
+    # 消费者重试：失败自动重试 3 次后不再 requeue，经队列绑定的死信交换机转投 DLQ
+    # （见 RabbitConfig），杜绝消费失败的消息无限 requeue 死循环
+    listener:
+      simple:
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 2000
+          multiplier: 2
+          max-interval: 10000
 
   # Elasticsearch（全文搜索；Spring Boot 3 的配置键是 uris，
   # Boot 2 时代的 spring.data.elasticsearch.cluster-nodes 已废弃）

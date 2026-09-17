@@ -2,7 +2,8 @@ package com.example.blog.config;
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.jsontype.impl.LaissezFaireSubTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.PolymorphicTypeValidator;
+import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -41,8 +42,13 @@ public class RedisCacheConfig {
         // 反序列化时才能恢复成原类型（如 ArticleVO、List<CommentVO>）
         ObjectMapper mapper = new ObjectMapper();
         mapper.registerModule(new JavaTimeModule());
+        // 默认 typing 收紧为本项目包的白名单：Redis 若被写入伪造的 @class，
+        // 反序列化会直接被拒绝，避免多态反序列化风险
+        PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.example.blog")
+                .build();
         mapper.activateDefaultTyping(
-                LaissezFaireSubTypeValidator.instance,
+                typeValidator,
                 ObjectMapper.DefaultTyping.NON_FINAL,
                 JsonTypeInfo.As.PROPERTY
         );

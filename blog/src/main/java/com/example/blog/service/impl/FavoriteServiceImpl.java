@@ -41,10 +41,8 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
     @Override
     @Transactional
     public void addFavorite(Long articleId) {
-        // 1. 校验文章存在（MP 自动过滤已删除文章）
-        if (articleService.getById(articleId) == null) {
-            throw new BusinessException(404, "文章不存在");
-        }
+        // 1. 校验文章存在且公开：草稿 / 已隐藏的文章不可收藏，防止绕过可见性
+        articleService.requirePublicArticle(articleId);
         Long userId = SecurityUtil.getCurrentUserId();
         // 2. 先查后插：常规重复收藏在这里拦截
         long count = count(new LambdaQueryWrapper<Favorite>()

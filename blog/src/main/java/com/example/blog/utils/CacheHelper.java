@@ -9,6 +9,8 @@ import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
 
 import java.util.function.Supplier;
+import java.util.function.Predicate;
+import java.util.Objects;
 
 /**
  * 缓存工具：Redisson 分布式锁防缓存击穿
@@ -30,6 +32,7 @@ public class CacheHelper {
 
     /**
      * 读缓存 → 未命中加分布式锁 → 回源查库 → 写缓存 → 释放锁
+     * <p>默认只要回源结果非 null 就写缓存</p>
      *
      * @param cacheName 缓存名（与 @Cacheable 的 value 一致）
      * @param key       缓存 key（与 @Cacheable 的 key 一致，如文章 id）
@@ -37,6 +40,18 @@ public class CacheHelper {
      * @return 缓存值或回源值；dbLoader 返回 null 时不写缓存
      */
     public <T> T getWithLock(String cacheName, Object key, Supplier<T> dbLoader) {
+        return getWithLock(cacheName, key, dbLoader, Objects::nonNull);
+    }
+
+    /**
+     * 带缓存条件的防击穿读取：cacheCondition 返回 false 的结果只返回、不写缓存
+     * <p>用于「部分结果不应进缓存」的场景，如详情接口只缓存公开文章
+     * （与 @Cacheable 的 unless 语义保持一致），等待线程会各自回源。</p>
+     *
+     * @param cacheCondition 决定回源结果是否写入缓存的谓词
+     */
+    public <T> T getWithLock(String cacheName, Object key, Supplier<T> dbLoader,
+                             Predicate<T> cacheCondition) {
         Cache cache = cacheManager.getCache(cacheName);
         if (cache == null) {
             throw new IllegalArgumentException("缓存不存在: " + cacheName);
@@ -58,10 +73,10 @@ public class CacheHelper {
                 log.debug("等锁期间缓存已被写入: {}:{}", cacheName, key);
                 return cached;
             }
-            // 4. 回源查库并写缓存（null 不缓存，与 disableCachingNullValues 一致）
+            // 4. 回源查库并按条件写缓存（null 不缓存，与 disableCachingNullValues 一致）
             log.debug("缓存未命中，回源查库: {}:{}", cacheName, key);
             T value = dbLoader.get();
-            if (value != null) {
+            if (cacheCondition.test(value)) {
                 cache.put(key, value);
             }
             return value;

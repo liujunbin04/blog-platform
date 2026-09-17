@@ -46,10 +46,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     @Override
     @Transactional
     public CommentVO addComment(CommentDTO dto) {
-        // 1. 校验文章存在（MP 自动过滤已删除文章，查不到即视为不存在）
-        if (articleService.getById(dto.getArticleId()) == null) {
-            throw new BusinessException(404, "文章不存在");
-        }
+        // 1. 校验文章存在且公开：草稿 / 已隐藏的文章不可互动，防止绕过可见性
+        Article article = articleService.requirePublicArticle(dto.getArticleId());
         // 2. 解析回复目标：replyToId 为空表示一级评论；
         //    非空时校验目标评论存在且属于同一篇文章，父评论（挂树用）由目标推导：
         //    目标是一级评论则父评论=目标本身，否则父评论=目标的父评论（统一挂到一级评论下）
@@ -79,7 +77,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         //    回复楼中楼某条评论时通知会发错人），一级评论通知文章作者（自己操作自己文章不发）。
         //    必须在事务提交后再投递：事务内直发的话消息可能先于提交到达消费者，
         //    消费者查库会查不到刚插入的评论
-        Article article = articleService.getById(dto.getArticleId());
         Long recipientId = target != null ? target.getUserId() : article.getAuthorId();
         if (!recipientId.equals(senderId)) {
             NotificationMessage message = new NotificationMessage(
@@ -137,8 +134,20 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     @Override
     @Transactional(readOnly = true)
     public List<CommentVO> getCommentTree(Long articleId) {
-        if (articleService.getById(articleId) == null) {
+        Article article = articleService.getById(articleId);
+        if (article == null) {
             throw new BusinessException(404, "文章不存在");
+        }
+        // 公开文章对所有人可读；草稿 / 已隐藏的文章仅作者本人可看评论
+        // （详情页允许作者查看自己的受限文章，评论树需保持一致），其余按不存在处理
+        boolean restricted = article.getStatus() == null
+                || article.getStatus() != ArticleServiceImpl.STATUS_PUBLISHED
+                || (article.getHidden() != null && article.getHidden() == 1);
+        if (restricted) {
+            Long userId = currentUserIdOrNull();
+            if (userId == null || !userId.equals(article.getAuthorId())) {
+                throw new BusinessException(404, "文章不存在");
+            }
         }
         // 一次查出该文章全部评论（按时间正序），再批量查评论者，最后在内存中组装树
         List<Comment> comments = lambdaQuery()
@@ -217,5 +226,16 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
      */
     private User currentUser() {
         return userService.getById(SecurityUtil.getCurrentUserId());
+    }
+
+    /**
+     * 取当前登录用户 id，匿名访客返回 null（评论树是公开接口，需处理匿名场景）
+     */
+    private Long currentUserIdOrNull() {
+        try {
+            return SecurityUtil.getCurrentUserId();
+        } catch (BusinessException e) {
+            return null;
+        }
     }
 }

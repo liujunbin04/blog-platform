@@ -2,6 +2,7 @@ package com.example.blog.config;
 
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
+import org.springframework.amqp.core.DirectExchange;
 import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
@@ -33,6 +34,15 @@ public class RabbitConfig {
     /** 路由键：点赞 */
     public static final String ROUTING_LIKE_ADD = "like.add";
 
+    /** 通知死信交换机：消费重试耗尽的消息转投 DLQ，避免毒消息无限 requeue */
+    public static final String NOTIFY_DLX = "blog.notify.dlx";
+
+    /** 评论通知死信队列 */
+    public static final String COMMENT_NOTIFY_DLQ = "comment.notify.dlq";
+
+    /** 点赞通知死信队列 */
+    public static final String LIKE_NOTIFY_DLQ = "like.notify.dlq";
+
     /**
      * 消息转换器：JSON 序列化。
      * 默认的 SimpleMessageConverter 只支持 String/byte[]/Serializable，
@@ -52,12 +62,18 @@ public class RabbitConfig {
 
     @Bean
     public Queue commentNotifyQueue() {
-        return QueueBuilder.durable(COMMENT_NOTIFY_QUEUE).build();
+        return QueueBuilder.durable(COMMENT_NOTIFY_QUEUE)
+                .deadLetterExchange(NOTIFY_DLX)
+                .deadLetterRoutingKey(ROUTING_COMMENT_ADD)
+                .build();
     }
 
     @Bean
     public Queue likeNotifyQueue() {
-        return QueueBuilder.durable(LIKE_NOTIFY_QUEUE).build();
+        return QueueBuilder.durable(LIKE_NOTIFY_QUEUE)
+                .deadLetterExchange(NOTIFY_DLX)
+                .deadLetterRoutingKey(ROUTING_LIKE_ADD)
+                .build();
     }
 
     @Bean
@@ -68,5 +84,30 @@ public class RabbitConfig {
     @Bean
     public Binding likeNotifyBinding(Queue likeNotifyQueue, TopicExchange blogExchange) {
         return BindingBuilder.bind(likeNotifyQueue).to(blogExchange).with(ROUTING_LIKE_ADD);
+    }
+
+    @Bean
+    public DirectExchange notifyDlx() {
+        return new DirectExchange(NOTIFY_DLX, true, false);
+    }
+
+    @Bean
+    public Queue commentNotifyDlq() {
+        return QueueBuilder.durable(COMMENT_NOTIFY_DLQ).build();
+    }
+
+    @Bean
+    public Queue likeNotifyDlq() {
+        return QueueBuilder.durable(LIKE_NOTIFY_DLQ).build();
+    }
+
+    @Bean
+    public Binding commentNotifyDlqBinding(Queue commentNotifyDlq, DirectExchange notifyDlx) {
+        return BindingBuilder.bind(commentNotifyDlq).to(notifyDlx).with(ROUTING_COMMENT_ADD);
+    }
+
+    @Bean
+    public Binding likeNotifyDlqBinding(Queue likeNotifyDlq, DirectExchange notifyDlx) {
+        return BindingBuilder.bind(likeNotifyDlq).to(notifyDlx).with(ROUTING_LIKE_ADD);
     }
 }

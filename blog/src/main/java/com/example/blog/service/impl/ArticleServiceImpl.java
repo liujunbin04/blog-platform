@@ -16,15 +16,15 @@ import com.example.blog.mapper.FavoriteMapper;
 import com.example.blog.mapper.LikeRecordMapper;
 import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.repository.ArticleSearchRepository;
+import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
 import com.example.blog.service.UserService;
+import com.example.blog.service.ViewCountService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.ArticleVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.CachePut;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +50,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private final UserService userService;
 
     private final ArticleSearchRepository articleSearchRepository;
+
+    /** 文章内容缓存（独立 Bean，避免类内自调用导致 @Cacheable 失效） */
+    private final ArticleCacheService articleCacheService;
+
+    /** 浏览量计数：走 Redis 累加，详情页不再同步写数据库 */
+    private final ViewCountService viewCountService;
 
     // 硬删除文章时同步清理的关联数据（直接注入 Mapper，避免与各 Service 相互依赖）
     private final CommentMapper commentMapper;
@@ -119,6 +125,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 同步删除 ES 文档（ES 操作在 MySQL 事务之外、失败不会回滚，
         // 失败仅记日志：下次启动的全量回填会以数据库为准纠正索引）
         deleteFromEsQuietly(id);
+        // 清掉 Redis 里的浏览量计数，否则回写任务会不断尝试更新一个已不存在的行
+        viewCountService.remove(id);
     }
 
     @Override
@@ -230,49 +238,79 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         return PageResult.of(list, page.getTotal(), page.getCurrent(), page.getSize());
     }
 
+    /**
+     * 文章详情（浏览量 +1）
+     * <p>
+     * 性能优化（2026-08-31）：
+     * 原本这里是「2 次 SELECT + 1 次 UPDATE + 1 次 Redis 写，且包在一个事务里」——
+     * 每次访问都要 UPDATE view_count，既有行锁竞争，又逼着 MySQL 每次提交刷 redo log，
+     * 一个纯读接口按写接口的成本在跑，实测严重拖累吞吐。
+     * </p>
+     * <p>
+     * 现在改成：文章内容走缓存（命中时零数据库访问）+ 浏览量只在 Redis 里 INCR。
+     * 去掉了事务、行锁和刷盘，浏览量由 ViewCountFlushTask 定时批量落盘。
+     * 因此这里<b>不再需要 @Transactional 和 @CachePut</b>。
+     * </p>
+     */
     @Override
-    @Transactional
-    // 详情访问会刷新浏览量，方法返回前把最新数据写回缓存，保持缓存与数据库一致
-    @CachePut(value = "article", key = "#id")
     public ArticleVO getDetail(Long id) {
-        Article article = getById(id);
-        if (article == null) {
-            throw new BusinessException(404, "文章不存在");
-        }
+        // 走缓存：公开文章命中时一次数据库都不查。
+        // 注意必须经 articleCacheService 这个 Bean 调用，
+        // 直接调本类方法会因 AOP 自调用导致缓存失效
+        ArticleVO vo = articleCacheService.getCached(id);
+
         // 草稿（status=0）与已隐藏（hidden=1）的文章仅作者本人可见：其余任何人
         // （含匿名访客）一律按「不存在」处理——返回 404 而非 401/403，
-        // 避免向未授权者暴露这类文章的存在性
-        boolean isOwner = false;
-        try {
-            isOwner = article.getAuthorId().equals(SecurityUtil.getCurrentUserId());
-        } catch (BusinessException e) {
-            // 匿名访客：isOwner 保持 false，走下面的 404 分支
+        // 避免向未授权者暴露这类文章的存在性。
+        // 权限判断用的 status / hidden 都来自 VO，公开文章已缓存，故不额外查库
+        boolean restricted = vo.getStatus() != STATUS_PUBLISHED
+                || (vo.getHidden() != null && vo.getHidden() == 1);
+        if (restricted) {
+            // 草稿/隐藏文章本就不进缓存，这里查一次实体拿 authorId 做归属判断。
+            // 不能用 vo.getAuthor().getId() 代替：作者被逻辑删除时 selectDetailWithAuthor
+            // 关联不到 user 行、author 为 null，会导致作者本人反而看不到自己的文章
+            Article article = getById(id);
+            Long currentUserId = currentUserIdOrNull();
+            if (article == null || currentUserId == null
+                    || !currentUserId.equals(article.getAuthorId())) {
+                throw new BusinessException(404, "文章不存在");
+            }
         }
-        boolean restricted = article.getStatus() != STATUS_PUBLISHED
-                || (article.getHidden() != null && article.getHidden() == 1);
-        if (restricted && !isOwner) {
-            throw new BusinessException(404, "文章不存在");
-        }
-        // 原子自增浏览量（每次访问都自增，这部分不走缓存）
-        lambdaUpdate().setSql("view_count = view_count + 1").eq(Article::getId, id).update();
-        // 直接查库取最新数据（缓存里是旧浏览量，不能读缓存），交给 @CachePut 刷新
-        ArticleVO vo = baseMapper.selectDetailWithAuthor(id);
-        if (vo == null) {
-            // 极端情况：存在性校验后、查询前文章被删除
-            throw new BusinessException(404, "文章不存在");
-        }
+
+        // 浏览量只动 Redis，不写数据库。
+        // vo 里的 viewCount 是缓存/数据库中的旧值，仅作为 Redis 无计数时的初始化基线
+        vo.setViewCount((int) viewCountService.incrementAndGet(id, vo.getViewCount()));
         return vo;
     }
 
     @Override
-    // 纯读方法 + 缓存：命中时直接返回缓存，不查数据库
-    @Cacheable(value = "article", key = "#id")
     public ArticleVO getArticleById(Long id) {
-        ArticleVO vo = baseMapper.selectDetailWithAuthor(id);
-        if (vo == null) {
+        // 委托给缓存 Bean：由它持有 @Cacheable，保证经代理调用
+        return articleCacheService.getCached(id);
+    }
+
+    @Override
+    public Article requirePublicArticle(Long id) {
+        Article article = getById(id);
+        // 与 getDetail 的可见性策略一致：非公开一律按「文章不存在」处理，
+        // 防止通过互动接口枚举草稿 / 已隐藏的文章
+        if (article == null || !isPublic(article)) {
             throw new BusinessException(404, "文章不存在");
         }
-        return vo;
+        return article;
+    }
+
+    /**
+     * 取当前登录用户 id，匿名访客返回 null
+     * <p>原实现靠 catch BusinessException 判断匿名，逻辑相同但返回 null 更好用</p>
+     */
+    private Long currentUserIdOrNull() {
+        try {
+            return SecurityUtil.getCurrentUserId();
+        } catch (BusinessException e) {
+            // 匿名访客：SecurityUtil 取不到认证信息时会抛异常
+            return null;
+        }
     }
 
     /**
