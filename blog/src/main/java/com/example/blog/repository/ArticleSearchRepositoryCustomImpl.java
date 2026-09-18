@@ -47,7 +47,7 @@ public class ArticleSearchRepositoryCustomImpl implements ArticleSearchRepositor
         NativeQuery query = NativeQuery.builder()
                 .withQuery(q -> q.multiMatch(mm -> mm
                         .query(keyword)
-                        .fields("title", "content")))
+                        .fields("title", "content", "authorNickname", "tagNames")))
                 .withHighlightQuery(new HighlightQuery(highlight, ArticleDocument.class))
                 .withPageable(PageRequest.of(page - 1, size))
                 .build();

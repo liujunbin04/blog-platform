@@ -180,7 +180,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
      */
     private void indexToEsQuietly(Article article) {
         try {
-            articleSearchRepository.save(ArticleDocument.from(article));
+            User author = userService.getById(article.getAuthorId());
+            String nickname = author == null ? null : author.getNickname();
+            articleSearchRepository.save(ArticleDocument.from(article, nickname));
         } catch (Exception e) {
             log.error("文章同步到 ES 失败（不影响主流程）: articleId={}", article.getId(), e);
         }
