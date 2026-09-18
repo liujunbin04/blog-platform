@@ -84,7 +84,8 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                     recipientId,
                     senderId,
                     dto.getArticleId(),
-                    dto.getContent()
+                    dto.getContent(),
+                    "COMMENT:" + comment.getId()
             );
             sendAfterCommit(RabbitConfig.ROUTING_COMMENT_ADD, message);
         }

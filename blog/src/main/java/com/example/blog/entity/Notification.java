@@ -29,6 +29,9 @@ public class Notification {
 
     private Long articleId;
 
+    /** 业务事件唯一键，唯一索引保证消息幂等。 */
+    private String eventKey;
+
     private String content;
 
     /** 是否已读：0 未读 1 已读 */

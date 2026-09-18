@@ -27,6 +27,9 @@ public class NotificationMessage {
     /** 通知内容摘要 */
     private String content;
 
+    /** 业务事件唯一键，例如 LIKE:{likeRecordId} / COMMENT:{commentId} */
+    private String eventKey;
+
     public static final String TYPE_COMMENT = "COMMENT";
 
     public static final String TYPE_LIKE = "LIKE";
