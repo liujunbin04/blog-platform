@@ -74,7 +74,8 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
                     article.getAuthorId(),
                     userId,
                     articleId,
-                    "你的文章收到一个新点赞"
+                    "你的文章收到一个新点赞",
+                    "LIKE:" + record.getId()
             );
             sendAfterCommit(RabbitConfig.ROUTING_LIKE_ADD, message);
         }

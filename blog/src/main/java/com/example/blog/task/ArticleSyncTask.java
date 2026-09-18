@@ -37,6 +37,7 @@ public class ArticleSyncTask {
     @EventListener(ApplicationReadyEvent.class)
     public void backfillSearchIndex() {
         try {
+            reconcileSearchVisibility();
             List<Article> articles = articleService.lambdaQuery()
                     .eq(Article::getStatus, 1)
                     .eq(Article::getHidden, 0)
@@ -54,6 +55,23 @@ public class ArticleSyncTask {
             // ES 未启动 / 索引建不出来时不能阻断应用启动：搜索功能降级，其余功能不受影响
             log.warn("ES 全量回填失败，搜索功能暂不可用（不影响其他功能）: {}", e.getMessage());
         }
+    }
+
+    private void reconcileSearchVisibility() {
+        articleSearchRepository.findAll().forEach(document -> {
+            Article article = articleService.getById(document.getId());
+            if (!isPublic(article)) {
+                articleSearchRepository.deleteById(document.getId());
+            }
+        });
+    }
+
+    private boolean isPublic(Article article) {
+        return article != null
+                && article.getStatus() != null
+                && article.getStatus() == 1
+                && article.getHidden() != null
+                && article.getHidden() == 0;
     }
 
     /**

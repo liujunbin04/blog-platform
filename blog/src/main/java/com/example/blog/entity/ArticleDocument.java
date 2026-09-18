@@ -8,6 +8,8 @@ import org.springframework.data.elasticsearch.annotations.FieldType;
 
 import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Arrays;
+import java.util.List;
 
 /**
  * 文章搜索文档（对应 Elasticsearch 索引 article）
@@ -43,6 +45,14 @@ public class ArticleDocument {
     @Field(type = FieldType.Keyword)
     private String tags;
 
+    /** 标签分词字段：支持按标签名称全文搜索。 */
+    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
+    private List<String> tagNames;
+
+    /** 作者昵称：冗余存储，用于全文搜索。 */
+    @Field(type = FieldType.Text, analyzer = "ik_max_word", searchAnalyzer = "ik_smart")
+    private String authorNickname;
+
     /** 浏览量 */
     @Field(type = FieldType.Integer)
     private Integer viewCount;
@@ -65,6 +75,10 @@ public class ArticleDocument {
      * LocalDateTime -> Instant 需要指定时区（本项目统一系统默认时区，即 Asia/Shanghai）
      */
     public static ArticleDocument from(Article article) {
+        return from(article, null);
+    }
+
+    public static ArticleDocument from(Article article, String authorNickname) {
         ArticleDocument doc = new ArticleDocument();
         doc.setId(article.getId());
         doc.setTitle(article.getTitle());
@@ -72,6 +86,15 @@ public class ArticleDocument {
         doc.setAuthorId(article.getAuthorId());
         doc.setCategory(article.getCategory());
         doc.setTags(article.getTags());
+        if (article.getTags() == null || article.getTags().isBlank()) {
+            doc.setTagNames(List.of());
+        } else {
+        doc.setTagNames(Arrays.stream(article.getTags().split(","))
+                    .map(String::trim)
+                    .filter(tag -> !tag.isEmpty())
+                    .toList());
+        }
+        doc.setAuthorNickname(authorNickname);
         doc.setViewCount(article.getViewCount());
         doc.setLikeCount(article.getLikeCount());
         doc.setCreateTime(article.getCreateTime().atZone(ZoneId.systemDefault()).toInstant());

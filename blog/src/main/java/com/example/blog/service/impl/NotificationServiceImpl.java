@@ -32,30 +32,16 @@ import java.util.stream.Collectors;
 public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Notification>
         implements NotificationService {
 
-    /** 幂等窗口：MQ 至少一次投递可能在短时间内重发同一消息 */
-    private static final int DEDUP_WINDOW_SECONDS = 10;
-
     private final UserService userService;
 
     @Override
     @Transactional
     public void createFromMessage(NotificationMessage message) {
-        // 幂等判重：10 秒窗口内同发件人+文章+类型的通知视为重复投递，跳过。
-        // 窗口式判重在教程场景够用；严格去重需要消息表唯一键携带业务 id（如点赞记录 id）
-        long recent = count(new LambdaQueryWrapper<Notification>()
-                .eq(Notification::getRecipientId, message.getRecipientId())
-                .eq(Notification::getSenderId, message.getSenderId())
-                .eq(Notification::getType, message.getType())
-                .eq(Notification::getArticleId, message.getArticleId())
-                .ge(Notification::getCreateTime,
-                        LocalDateTime.now().minusSeconds(DEDUP_WINDOW_SECONDS)));
-        if (recent > 0) {
-            return;
-        }
         Notification notification = new Notification();
         notification.setRecipientId(message.getRecipientId());
         notification.setSenderId(message.getSenderId());
         notification.setType(message.getType());
+        notification.setEventKey(message.getEventKey());
         notification.setArticleId(message.getArticleId());
         // content 取自评论原文，CommentDTO 允许 1000 字而本列为 VARCHAR(500)：
         // 超长会插库失败并经 basicNack(requeue) 变成毒消息死循环，截断兜底
@@ -64,7 +50,11 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
                 : content.substring(0, Math.min(content.length(), 500)));
         notification.setIsRead(0);
         // create_time 由数据库默认值生成
-        save(notification);
+        try {
+            save(notification);
+        } catch (org.springframework.dao.DuplicateKeyException ignored) {
+            // 唯一索引保证同一业务事件只写入一次
+        }
     }
 
     @Override

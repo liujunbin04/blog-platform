@@ -11,6 +11,7 @@ import com.example.blog.entity.ArticleDocument;
 import com.example.blog.entity.User;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleSearchVisibilityService;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
@@ -50,6 +51,8 @@ public class ArticleController {
     private final ArticleService articleService;
 
     private final ArticleSearchRepository articleSearchRepository;
+
+    private final ArticleSearchVisibilityService articleSearchVisibilityService;
 
     private final UserService userService;
 
@@ -117,6 +120,7 @@ public class ArticleController {
         List<ArticleSearchVO> list = hits.getSearchHits().stream()
                 .map(ArticleSearchVO::from)
                 .toList();
+        list = articleSearchVisibilityService.filterVisible(list);
         // 批量回查作者：与列表页相同的防 N+1 模式；
         // 全部作者已被逻辑删除时 authorIds 可能为空集合，listByIds 传空会生成非法 SQL，必须判空
         Set<Long> authorIds = list.stream()
