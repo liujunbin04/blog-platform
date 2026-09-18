@@ -22,6 +22,11 @@ public interface HotArticleService {
     List<Long> getHotArticleIds(int topN);
 
     /**
+     * 当前有效热门文章总数，用于分页。
+     */
+    long countHotArticles();
+
+    /**
      * 取热门文章（含作者信息），按热度倒序
      */
     List<ArticleVO> getHotArticles(int topN);

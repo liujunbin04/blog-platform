@@ -4,6 +4,8 @@ import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.UserService;
+import com.example.blog.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -12,7 +14,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 定时任务：每 5 分钟把 MySQL 中最近更新的文章增量同步到 Elasticsearch
@@ -27,6 +34,7 @@ public class ArticleSyncTask {
 
     private final ArticleService articleService;
     private final ArticleSearchRepository articleSearchRepository;
+    private final UserService userService;
 
     /**
      * 应用启动完成后全量回填 ES 索引（saveAll 为按 id 的幂等 upsert）：
@@ -46,9 +54,7 @@ public class ArticleSyncTask {
                 log.info("ES 全量回填：无已发布文章，跳过");
                 return;
             }
-            List<ArticleDocument> documents = articles.stream()
-                    .map(ArticleDocument::from)
-                    .toList();
+            List<ArticleDocument> documents = toDocuments(articles);
             articleSearchRepository.saveAll(documents);
             log.info("ES 全量回填完成，共 {} 篇", documents.size());
         } catch (Exception e) {
@@ -94,14 +100,32 @@ public class ArticleSyncTask {
                 return;
             }
             // 转成 ES 文档批量写入（saveAll 内部走 Bulk API，一次请求写入全部）
-            List<ArticleDocument> documents = articles.stream()
-                    .map(ArticleDocument::from)
-                    .toList();
+            List<ArticleDocument> documents = toDocuments(articles);
             articleSearchRepository.saveAll(documents);
             log.info("文章同步到 ES 完成，共 {} 篇", documents.size());
         } catch (Exception e) {
             // 定时任务抛异常会被调度器中止，必须兜住
             log.error("文章同步到 ES 失败", e);
         }
+    }
+
+    protected List<ArticleDocument> toDocuments(List<Article> articles) {
+        if (articles.isEmpty()) {
+            return List.of();
+        }
+        Set<Long> authorIds = articles.stream()
+                .map(Article::getAuthorId)
+                .collect(Collectors.toSet());
+        Map<Long, User> authorMap = authorIds.isEmpty() ? Collections.emptyMap()
+                : userService.listByIds(authorIds).stream()
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        return articles.stream()
+                .map(article -> ArticleDocument.from(
+                        article,
+                        authorMap.containsKey(article.getAuthorId())
+                                ? authorMap.get(article.getAuthorId()).getNickname()
+                                : null
+                ))
+                .toList();
     }
 }

@@ -2,9 +2,10 @@ package com.example.blog.task;
 
 import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
+import com.example.blog.entity.User;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
-import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
+import com.example.blog.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -26,6 +27,9 @@ class ArticleSyncTaskTest {
     @Mock
     private ArticleSearchRepository articleSearchRepository;
 
+    @Mock
+    private UserService userService;
+
     @InjectMocks
     private ArticleSyncTask task;
 
@@ -40,5 +44,30 @@ class ArticleSyncTaskTest {
         task.backfillSearchIndex();
 
         verify(articleSearchRepository).deleteById(8L);
+    }
+
+    @Test
+    void syncRecentArticlesIncludesAuthorNickname() {
+        Article article = new Article();
+        article.setId(9L);
+        article.setAuthorId(3L);
+        article.setTitle("title");
+        article.setContent("content");
+        article.setViewCount(0);
+        article.setLikeCount(0);
+        article.setCreateTime(java.time.LocalDateTime.now());
+        article.setUpdateTime(java.time.LocalDateTime.now());
+        User author = new User();
+        author.setId(3L);
+        author.setNickname("tester");
+        when(userService.listByIds(org.mockito.ArgumentMatchers.anySet()))
+                .thenReturn(List.of(author));
+
+        List<ArticleDocument> documents = task.toDocuments(List.of(article));
+
+        org.junit.jupiter.api.Assertions.assertEquals(
+                "tester",
+                documents.get(0).getAuthorNickname()
+        );
     }
 }

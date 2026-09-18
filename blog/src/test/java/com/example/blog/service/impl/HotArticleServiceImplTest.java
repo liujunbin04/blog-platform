@@ -74,4 +74,12 @@ class HotArticleServiceImplTest {
 
         assertEquals(List.of(9L, 8L, 7L), ids);
     }
+
+    @Test
+    void countHotArticlesUsesZSetCardinality() {
+        when(stringRedisTemplate.opsForZSet()).thenReturn(zSetOperations);
+        when(zSetOperations.zCard(HotArticleServiceImpl.HOT_KEY)).thenReturn(12L);
+
+        assertEquals(12L, service.countHotArticles());
+    }
 }

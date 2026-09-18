@@ -87,6 +87,18 @@ public class HotArticleServiceImpl implements HotArticleService {
     }
 
     @Override
+    public long countHotArticles() {
+        Long count = stringRedisTemplate.opsForZSet().zCard(HOT_KEY);
+        if (count != null && count > 0) {
+            return count;
+        }
+        return articleService.lambdaQuery()
+                .eq(Article::getStatus, 1)
+                .eq(Article::getHidden, 0)
+                .count();
+    }
+
+    @Override
     public List<ArticleVO> getHotArticles(int topN) {
         List<Long> ids = getHotArticleIds(topN);
         if (ids.isEmpty()) {

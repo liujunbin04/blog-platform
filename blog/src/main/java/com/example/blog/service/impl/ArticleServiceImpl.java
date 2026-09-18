@@ -208,7 +208,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
             int to = Math.min(from + dto.getPageSize(), all.size());
             PageResult<ArticleVO> result = new PageResult<>();
             result.setList(all.subList(from, to));
-            result.setTotal((long) all.size());
+            result.setTotal(hotArticleService.countHotArticles());
             result.setPageNum(dto.getPageNum().longValue());
             result.setPageSize(dto.getPageSize().longValue());
             return result;
