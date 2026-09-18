@@ -90,6 +90,14 @@ export interface CommentVO {
   children: CommentVO[]
 }
 
+/** 后端 CommentPageVO */
+export interface CommentPageVO {
+  total: number
+  pageNum: number
+  pageSize: number
+  list: CommentVO[]
+}
+
 /** 后端 NotificationVO */
 export interface NotificationVO {
   id: number

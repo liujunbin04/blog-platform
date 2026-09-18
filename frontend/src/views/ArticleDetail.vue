@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
@@ -8,7 +8,7 @@ import { CollectionTag, Star } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 
 import { deleteArticle, getArticleDetail } from '@/api/article'
-import { addComment, deleteComment, getCommentTree } from '@/api/comment'
+import { addComment, deleteComment, getCommentPage } from '@/api/comment'
 import { favoriteArticle, getFavoriteStatus, unfavoriteArticle } from '@/api/favorite'
 import { getLikeStatus, likeArticle, unlikeArticle } from '@/api/like'
 import AppShell from '@/components/AppShell.vue'
@@ -23,13 +23,17 @@ const md = new MarkdownIt({ breaks: true })
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
-const articleId = route.params.id as string
+const articleId = computed(() => String(route.params.id ?? ''))
+let articleRequestSeq = 0
 
 const loading = ref(false)
 const article = ref<ArticleVO | null>(null)
 const liked = ref(false)
 const favorited = ref(false)
 const comments = ref<CommentVO[]>([])
+const commentPage = ref(1)
+const commentPageSize = 20
+const commentTotal = ref(0)
 const commentContent = ref('')
 const submitting = ref(false)
 const replyTo = ref<CommentVO | null>(null)
@@ -57,33 +61,44 @@ function requireLogin(): boolean {
 }
 
 async function loadArticle() {
+  const requestSeq = ++articleRequestSeq
   loading.value = true
   try {
-    article.value = await getArticleDetail(articleId)
+    const value = await getArticleDetail(articleId.value)
+    if (requestSeq !== articleRequestSeq) return
+    article.value = value
   } finally {
-    loading.value = false
+    if (requestSeq === articleRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
 async function loadComments() {
-  comments.value = await getCommentTree(articleId)
+  const page = await getCommentPage({
+    articleId: articleId.value,
+    pageNum: commentPage.value,
+    pageSize: commentPageSize,
+  })
+  comments.value = page.list
+  commentTotal.value = Number(page.total)
 }
 
 async function loadInteractionStatus() {
   if (!userStore.isLoggedIn) return
-  liked.value = await getLikeStatus(articleId)
-  favorited.value = await getFavoriteStatus(articleId)
+  liked.value = await getLikeStatus(articleId.value)
+  favorited.value = await getFavoriteStatus(articleId.value)
 }
 
 async function onToggleLike() {
   if (!requireLogin() || !article.value) return
   try {
     if (liked.value) {
-      await unlikeArticle(articleId)
+      await unlikeArticle(articleId.value)
       liked.value = false
       article.value.likeCount -= 1
     } else {
-      await likeArticle(articleId)
+      await likeArticle(articleId.value)
       liked.value = true
       article.value.likeCount += 1
     }
@@ -96,11 +111,11 @@ async function onToggleFavorite() {
   if (!requireLogin()) return
   try {
     if (favorited.value) {
-      await unfavoriteArticle(articleId)
+      await unfavoriteArticle(articleId.value)
       favorited.value = false
       ElMessage.success('已取消收藏')
     } else {
-      await favoriteArticle(articleId)
+      await favoriteArticle(articleId.value)
       favorited.value = true
       ElMessage.success('收藏成功')
     }
@@ -120,7 +135,7 @@ async function onDelete() {
     return
   }
 
-  await deleteArticle(articleId)
+  await deleteArticle(articleId.value)
   ElMessage.success('删除成功')
   await router.push('/articles')
 }
@@ -137,10 +152,6 @@ function focusCommentEditor() {
   document.querySelector<HTMLTextAreaElement>('.comment-editor textarea')?.focus()
 }
 
-function countComments(list: CommentVO[]): number {
-  return list.reduce((sum, comment) => sum + 1 + countComments(comment.children), 0)
-}
-
 async function onSubmitComment() {
   const content = commentContent.value.trim()
   if (!content) {
@@ -151,7 +162,7 @@ async function onSubmitComment() {
   submitting.value = true
   try {
     await addComment({
-      articleId,
+      articleId: articleId.value,
       replyToId: replyTo.value?.id,
       content,
     })
@@ -178,6 +189,24 @@ async function onDeleteComment(comment: CommentVO) {
 }
 
 onMounted(() => {
+  loadArticle()
+  loadComments()
+  loadInteractionStatus()
+})
+
+function resetArticleState() {
+  article.value = null
+  liked.value = false
+  favorited.value = false
+  comments.value = []
+  commentTotal.value = 0
+  commentPage.value = 1
+  replyTo.value = null
+}
+
+watch(articleId, () => {
+  resetArticleState()
+  window.scrollTo({ top: 0 })
   loadArticle()
   loadComments()
   loadInteractionStatus()
@@ -253,7 +282,7 @@ onMounted(() => {
         </div>
 
         <section class="comments-section">
-          <h2>评论（{{ countComments(comments) }}）</h2>
+          <h2>评论（{{ commentTotal }}）</h2>
 
           <div v-if="replyTo" class="reply-banner">
             回复 @{{ replyTo.author?.nickname || '匿名' }}
@@ -281,6 +310,15 @@ onMounted(() => {
             :comment="comment"
             @reply="onReply"
             @delete="onDeleteComment"
+          />
+          <el-pagination
+            v-if="commentTotal > commentPageSize"
+            v-model:current-page="commentPage"
+            :page-size="commentPageSize"
+            :total="commentTotal"
+            layout="prev, pager, next"
+            class="comment-pagination"
+            @current-change="loadComments"
           />
         </section>
 
@@ -417,6 +455,11 @@ onMounted(() => {
 
 .comment-editor :deep(.el-textarea) {
   width: 100%;
+}
+
+.comment-pagination {
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .mobile-actions {
