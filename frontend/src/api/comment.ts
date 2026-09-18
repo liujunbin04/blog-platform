@@ -1,9 +1,18 @@
 import request from '@/utils/request'
-import type { CommentVO } from '@/types/api'
+import type { CommentPageVO, CommentVO } from '@/types/api'
 
-/** 某篇文章的评论树 */
+/** 某篇文章的评论树（保留给旧调用） */
 export function getCommentTree(articleId: number | string) {
   return request.get<never, CommentVO[]>('/comments', { params: { articleId } })
+}
+
+/** 一级评论分页 */
+export function getCommentPage(params: {
+  articleId: number | string
+  pageNum: number
+  pageSize: number
+}) {
+  return request.get<never, CommentPageVO>('/comments/page', { params })
 }
 
 /** 发表评论 / 回复评论；replyToId 不传表示一级评论（挂树的父评论由后端推导） */
