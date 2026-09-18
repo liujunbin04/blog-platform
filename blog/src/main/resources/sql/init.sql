@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS `comment` (
   `create_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_article` (`article_id`),
+  KEY `idx_article_parent_time` (`article_id`, `parent_id`, `create_time`),
   KEY `idx_user` (`user_id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '评论表';
 

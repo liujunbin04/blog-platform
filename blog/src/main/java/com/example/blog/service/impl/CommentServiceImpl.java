@@ -1,9 +1,12 @@
 package com.example.blog.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.blog.common.BusinessException;
 import com.example.blog.config.RabbitConfig;
 import com.example.blog.dto.CommentDTO;
+import com.example.blog.dto.CommentPageDTO;
 import com.example.blog.dto.NotificationMessage;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.Comment;
@@ -14,6 +17,7 @@ import com.example.blog.service.CommentService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.CommentVO;
+import com.example.blog.vo.CommentPageVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -25,6 +29,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -131,16 +136,82 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
             }
         });
     }
-
     @Override
     @Transactional(readOnly = true)
     public List<CommentVO> getCommentTree(Long articleId) {
+        requireVisibleArticle(articleId);
+        List<Comment> comments = lambdaQuery()
+                .eq(Comment::getArticleId, articleId)
+                .orderByAsc(Comment::getCreateTime)
+                .list();
+        if (comments.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<Long> userIds = comments.stream().map(Comment::getUserId).collect(Collectors.toSet());
+        comments.stream()
+                .map(Comment::getReplyToUserId)
+                .filter(id -> id != null && id != 0)
+                .forEach(userIds::add);
+        Map<Long, User> userMap = userService.listByIds(userIds).stream()
+                .collect(Collectors.toMap(User::getId, Function.identity()));
+        List<CommentVO> vos = comments.stream()
+                .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
+                .toList();
+        fillReplyToNicknames(vos, userMap);
+        return buildTree(vos);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CommentPageVO pageComments(CommentPageDTO dto) {
+        requireVisibleArticle(dto.getArticleId());
+        Page<Comment> page = findRootCommentPage(dto);
+        List<Comment> roots = page.getRecords();
+        List<Comment> all = new ArrayList<>(roots);
+        if (!roots.isEmpty()) {
+            List<Long> rootIds = roots.stream().map(Comment::getId).toList();
+            all.addAll(lambdaQuery()
+                    .in(Comment::getParentId, rootIds)
+                    .orderByAsc(Comment::getCreateTime)
+                    .list());
+        }
+        Set<Long> userIds = new HashSet<>();
+        all.forEach(comment -> {
+            userIds.add(comment.getUserId());
+            if (comment.getReplyToUserId() != null && comment.getReplyToUserId() != 0) {
+                userIds.add(comment.getReplyToUserId());
+            }
+        });
+        Map<Long, User> userMap = userIds.isEmpty() ? Map.of()
+                : userService.listByIds(userIds).stream()
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        List<CommentVO> vos = all.stream()
+                .map(comment -> CommentVO.from(comment, userMap.get(comment.getUserId())))
+                .toList();
+        fillReplyToNicknames(vos, userMap);
+        CommentPageVO result = new CommentPageVO();
+        result.setTotal(page.getTotal());
+        result.setPageNum(page.getCurrent());
+        result.setPageSize(page.getSize());
+        result.setList(buildTree(vos));
+        return result;
+    }
+
+    protected Page<Comment> findRootCommentPage(CommentPageDTO dto) {
+        return page(
+                new Page<>(dto.getPageNum(), dto.getPageSize()),
+                new LambdaQueryWrapper<Comment>()
+                        .eq(Comment::getArticleId, dto.getArticleId())
+                        .eq(Comment::getParentId, 0L)
+                        .orderByAsc(Comment::getCreateTime)
+        );
+    }
+
+    private void requireVisibleArticle(Long articleId) {
         Article article = articleService.getById(articleId);
         if (article == null) {
             throw new BusinessException(404, "文章不存在");
         }
-        // 公开文章对所有人可读；草稿 / 已隐藏的文章仅作者本人可看评论
-        // （详情页允许作者查看自己的受限文章，评论树需保持一致），其余按不存在处理
         boolean restricted = article.getStatus() == null
                 || article.getStatus() != ArticleServiceImpl.STATUS_PUBLISHED
                 || (article.getHidden() != null && article.getHidden() == 1);
@@ -150,31 +221,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 throw new BusinessException(404, "文章不存在");
             }
         }
-        // 一次查出该文章全部评论（按时间正序），再批量查评论者，最后在内存中组装树
-        List<Comment> comments = lambdaQuery()
-                .eq(Comment::getArticleId, articleId)
-                .orderByAsc(Comment::getCreateTime)
-                .list();
-        if (comments.isEmpty()) {
-            return Collections.emptyList();
-        }
-        // 评论者 + 被回复人一次批量查（防 N+1）；被回复人 id 直接存在评论行上，
-        // 被回复的评论被删除后昵称仍可解析
-        Set<Long> userIds = comments.stream().map(Comment::getUserId).collect(Collectors.toSet());
-        comments.stream()
-                .map(Comment::getReplyToUserId)
-                .filter(id -> id != null && id != 0)
-                .forEach(userIds::add);
-        Map<Long, User> userMap = userService.listByIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
-
-        List<CommentVO> vos = comments.stream()
-                .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
-                .toList();
-        fillReplyToNicknames(vos, userMap);
-        return buildTree(vos);
     }
-
     /**
      * 填充「被回复人昵称」：按 reply_to_user_id 从批量查好的 userMap 取；
      * 被回复人已注销（逻辑删除）时昵称为 null，前端兜底显示「佚名」

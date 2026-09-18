@@ -2,8 +2,10 @@ package com.example.blog.controller;
 
 import com.example.blog.common.Result;
 import com.example.blog.dto.CommentDTO;
+import com.example.blog.dto.CommentPageDTO;
 import com.example.blog.service.CommentService;
 import com.example.blog.vo.CommentVO;
+import com.example.blog.vo.CommentPageVO;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -50,5 +52,13 @@ public class CommentController {
     @GetMapping
     public Result<List<CommentVO>> tree(@RequestParam Long articleId) {
         return Result.success(commentService.getCommentTree(articleId));
+    }
+
+    /**
+     * 一级评论分页：GET /api/comments/page?articleId=1&pageNum=1&pageSize=20
+     */
+    @GetMapping("/page")
+    public Result<CommentPageVO> page(@Valid CommentPageDTO dto) {
+        return Result.success(commentService.pageComments(dto));
     }
 }
