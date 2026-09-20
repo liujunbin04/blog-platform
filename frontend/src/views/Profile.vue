@@ -10,9 +10,9 @@ import { deleteArticle, getMyArticles, hideArticle, unhideArticle } from '@/api/
 import { getMyFavorites, unfavoriteArticle } from '@/api/favorite'
 import AppShell from '@/components/AppShell.vue'
 import ProfileArticleLedger from '@/components/ProfileArticleLedger.vue'
+import ProfileFavoriteLedger from '@/components/ProfileFavoriteLedger.vue'
 import { useUserStore } from '@/stores/user'
 import type { ArticleVO, FavoriteVO } from '@/types/api'
-import { formatDateTime } from '@/utils/format'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -159,45 +159,26 @@ onMounted(loadMyArticles)
         </el-tab-pane>
 
         <el-tab-pane label="我的收藏" name="favorites">
-          <el-skeleton v-if="favLoading && favList.length === 0" :rows="6" animated />
-          <el-empty v-else-if="favList.length === 0" description="你还没有收藏文章" />
-
-          <div v-else class="ledger">
-            <div class="ledger-head favorites-head">
-              <span>文章</span>
-              <span>作者</span>
-              <span>收藏时间</span>
-              <span>操作</span>
-            </div>
-            <article
-              v-for="row in favList"
-              :key="`${row.articleId}-${row.favoriteTime}`"
-              class="ledger-row favorites-row"
-            >
-              <div class="ledger-title">
-                <button type="button" @click="router.push(`/articles/${row.articleId}`)">
-                  {{ row.title }}
-                </button>
-                <span>发布于 {{ formatDateTime(row.articleCreateTime) }}</span>
-              </div>
-              <span>{{ row.author?.nickname || '匿名' }}</span>
-              <span class="ledger-data">{{ formatDateTime(row.favoriteTime) }}</span>
-              <div class="ledger-actions">
-                <el-button link type="danger" @click="onCancelFavorite(row)">取消收藏</el-button>
-              </div>
-            </article>
-          </div>
-
-          <el-pagination
-            v-if="favTotal > 0"
-            v-model:current-page="favPage.pageNum"
-            v-model:page-size="favPage.pageSize"
+          <ProfileFavoriteLedger
+            :list="favList"
             :total="favTotal"
-            :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next"
-            class="pagination"
-            @current-change="loadFavorites"
+            :page="favPage"
+            :loading="favLoading"
+            @update:page="
+              (value) => {
+                favPage.pageNum = value.pageNum
+                favPage.pageSize = value.pageSize
+              }
+            "
+            @page-change="
+              (page) => {
+                favPage.pageNum = page
+                loadFavorites()
+              }
+            "
             @size-change="onFavoriteSizeChange"
+            @cancel="onCancelFavorite"
+            @open="(row) => router.push(`/articles/${row.articleId}`)"
           />
         </el-tab-pane>
       </el-tabs>
@@ -244,66 +225,6 @@ onMounted(loadMyArticles)
   padding: 26px 32px 32px;
 }
 
-.ledger-head,
-.ledger-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 110px 190px;
-  gap: 16px;
-  align-items: center;
-}
-
-.ledger-head {
-  padding: 0 4px 10px;
-  border-bottom: 1px solid var(--blog-line);
-  color: var(--blog-muted);
-  font-family: var(--blog-font-mono);
-  font-size: 10px;
-}
-
-.ledger-row {
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--blog-line-soft);
-}
-
-.ledger-title {
-  min-width: 0;
-}
-
-.ledger-title button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--blog-ink);
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ledger-title button:hover {
-  color: var(--blog-red);
-}
-
-.ledger-title span,
-.ledger-data {
-  display: block;
-  margin-top: 6px;
-  color: var(--blog-muted);
-  font-family: var(--blog-font-mono);
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.ledger-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.pagination {
-  justify-content: center;
-  margin-top: 22px;
-}
-
 @media (max-width: 767px) {
   .profile-header {
     align-items: flex-start;
@@ -321,33 +242,6 @@ onMounted(loadMyArticles)
 
   :deep(.el-tabs__content) {
     padding: 18px;
-  }
-
-  .ledger-head {
-    display: none;
-  }
-
-  .ledger-row {
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-  }
-
-  .ledger-title {
-    grid-column: 1 / -1;
-  }
-
-  .ledger-actions {
-    justify-content: flex-start;
-  }
-
-  .pagination {
-    justify-content: flex-start;
-    overflow-x: auto;
-  }
-
-  .pagination :deep(.el-pagination__sizes),
-  .pagination :deep(.el-pagination__total) {
-    display: none;
   }
 }
 </style>
