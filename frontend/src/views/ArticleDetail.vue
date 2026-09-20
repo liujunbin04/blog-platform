@@ -11,9 +11,9 @@ import { addComment, deleteComment, getCommentPage } from '@/api/comment'
 import { favoriteArticle, getFavoriteStatus, unfavoriteArticle } from '@/api/favorite'
 import { getLikeStatus, likeArticle, unlikeArticle } from '@/api/like'
 import AppShell from '@/components/AppShell.vue'
+import ArticleComments from '@/components/ArticleComments.vue'
 import ArticleDetailHeader from '@/components/ArticleDetailHeader.vue'
 import ArticleRail from '@/components/ArticleRail.vue'
-import CommentItem from '@/components/CommentItem.vue'
 import { useUserStore } from '@/stores/user'
 import type { ArticleVO, CommentVO } from '@/types/api'
 
@@ -33,9 +33,9 @@ const comments = ref<CommentVO[]>([])
 const commentPage = ref(1)
 const commentPageSize = 20
 const commentTotal = ref(0)
-const commentContent = ref('')
 const submitting = ref(false)
 const replyTo = ref<CommentVO | null>(null)
+const commentsRef = ref<InstanceType<typeof ArticleComments> | null>(null)
 
 const renderedContent = computed(() => (article.value ? md.render(article.value.content) : ''))
 const isAuthor = computed(
@@ -73,14 +73,15 @@ async function loadArticle() {
   }
 }
 
-async function loadComments() {
-  const page = await getCommentPage({
+async function loadComments(page = commentPage.value) {
+  const result = await getCommentPage({
     articleId: articleId.value,
-    pageNum: commentPage.value,
+    pageNum: page,
     pageSize: commentPageSize,
   })
-  comments.value = page.list
-  commentTotal.value = Number(page.total)
+  commentPage.value = page
+  comments.value = result.list
+  commentTotal.value = Number(result.total)
 }
 
 async function loadInteractionStatus() {
@@ -148,16 +149,10 @@ function cancelReply() {
 }
 
 function focusCommentEditor() {
-  document.querySelector<HTMLTextAreaElement>('.comment-editor textarea')?.focus()
+  commentsRef.value?.focusEditor()
 }
 
-async function onSubmitComment() {
-  const content = commentContent.value.trim()
-  if (!content) {
-    ElMessage.warning('评论内容不能为空')
-    return
-  }
-
+async function onSubmitComment(content: string) {
   submitting.value = true
   try {
     await addComment({
@@ -165,7 +160,7 @@ async function onSubmitComment() {
       replyToId: replyTo.value?.id,
       content,
     })
-    commentContent.value = ''
+    commentsRef.value?.clearEditor()
     cancelReply()
     await loadComments()
   } catch {
@@ -239,46 +234,20 @@ watch(articleId, () => {
           />
         </div>
 
-        <section class="comments-section">
-          <h2>评论（{{ commentTotal }}）</h2>
-
-          <div v-if="replyTo" class="reply-banner">
-            回复 @{{ replyTo.author?.nickname || '匿名' }}
-            <el-button link size="small" @click="cancelReply">取消</el-button>
-          </div>
-
-          <div class="comment-editor">
-            <el-input
-              v-model="commentContent"
-              type="textarea"
-              :rows="3"
-              maxlength="1000"
-              show-word-limit
-              placeholder="写下你的评论"
-            />
-            <el-button type="primary" :loading="submitting" @click="onSubmitComment">
-              发表评论
-            </el-button>
-          </div>
-
-          <el-empty v-if="comments.length === 0" description="还没有评论，来抢沙发" :image-size="80" />
-          <CommentItem
-            v-for="comment in comments"
-            :key="comment.id"
-            :comment="comment"
-            @reply="onReply"
-            @delete="onDeleteComment"
-          />
-          <el-pagination
-            v-if="commentTotal > commentPageSize"
-            v-model:current-page="commentPage"
-            :page-size="commentPageSize"
-            :total="commentTotal"
-            layout="prev, pager, next"
-            class="comment-pagination"
-            @current-change="loadComments"
-          />
-        </section>
+        <ArticleComments
+          ref="commentsRef"
+          :comments="comments"
+          :comment-total="commentTotal"
+          :comment-page="commentPage"
+          :comment-page-size="commentPageSize"
+          :submitting="submitting"
+          :reply-to="replyTo"
+          @submit="onSubmitComment"
+          @change-page="loadComments"
+          @reply="onReply"
+          @cancel-reply="cancelReply"
+          @delete-comment="onDeleteComment"
+        />
 
         <div class="mobile-actions">
           <button type="button" @click="onToggleLike">点赞 {{ article.likeCount }}</button>
@@ -311,43 +280,6 @@ watch(articleId, () => {
   line-height: 1.9;
 }
 
-.comments-section {
-  max-width: 840px;
-  margin-top: 28px;
-  padding: 28px;
-  border: 1px solid var(--blog-line);
-  background: var(--blog-paper);
-}
-
-.comments-section h2 {
-  margin-top: 0;
-  font-family: var(--blog-font-display);
-}
-
-.reply-banner {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: var(--blog-blueprint);
-  font-size: 13px;
-}
-
-.comment-editor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.comment-editor :deep(.el-textarea) {
-  width: 100%;
-}
-
-.comment-pagination {
-  justify-content: center;
-  margin-top: 20px;
-}
-
 .mobile-actions {
   display: none;
 }
@@ -365,10 +297,6 @@ watch(articleId, () => {
 @media (max-width: 767px) {
   .article-main {
     padding: 26px 18px 36px;
-  }
-
-  .comments-section {
-    padding: 20px 16px 90px;
   }
 
   .mobile-actions {
