@@ -8,6 +8,7 @@ import MarkdownIt from 'markdown-it'
 import { getArticleEditData, publishArticle, updateArticle, type ArticleFormData } from '@/api/article'
 import AppShell from '@/components/AppShell.vue'
 import EditorDocumentBar from '@/components/EditorDocumentBar.vue'
+import EditorMetadataFields from '@/components/EditorMetadataFields.vue'
 import EditorOutline from '@/components/EditorOutline.vue'
 import EditorToolbar from '@/components/EditorToolbar.vue'
 import {
@@ -197,27 +198,16 @@ watch(
           <EditorOutline class="desktop-outline" :items="outline" @navigate="navigateToLine" />
 
           <section class="document-panel">
-            <div class="metadata-fields">
-              <el-form-item prop="title" class="title-field">
-                <el-input
-                  v-model="form.title"
-                  size="large"
-                  maxlength="200"
-                  placeholder="文章标题"
-                  aria-label="文章标题"
-                />
-              </el-form-item>
-              <el-form-item prop="category">
-                <el-input v-model="form.category" placeholder="分类" aria-label="文章分类" />
-              </el-form-item>
-              <el-form-item prop="tags">
-                <el-input
-                  v-model="form.tags"
-                  placeholder="标签，使用英文逗号分隔"
-                  aria-label="文章标签"
-                />
-              </el-form-item>
-            </div>
+            <EditorMetadataFields
+              :model-value="{ title: form.title, category: form.category, tags: form.tags }"
+              @update:model-value="
+                (value) => {
+                  form.title = value.title
+                  form.category = value.category
+                  form.tags = value.tags
+                }
+              "
+            />
 
             <el-form-item prop="content" class="content-field">
               <textarea
@@ -335,26 +325,8 @@ watch(
   background: #f9fbfc;
 }
 
-.metadata-fields {
-  display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(120px, 0.7fr) minmax(160px, 1fr);
-  gap: 10px;
-  margin-bottom: 14px;
-}
-
-.metadata-fields :deep(.el-form-item),
 .content-field {
   margin-bottom: 0;
-}
-
-.metadata-fields :deep(.el-form-item__error) {
-  position: static;
-}
-
-.title-field :deep(input) {
-  font-family: var(--blog-font-display);
-  font-size: 20px;
-  font-weight: 700;
 }
 
 .content-field :deep(.el-form-item__content) {
@@ -452,10 +424,6 @@ watch(
   .mobile-info-panel {
     display: none;
     padding: 16px;
-  }
-
-  .metadata-fields {
-    grid-template-columns: 1fr;
   }
 
   .mobile-panel-edit .document-panel,
