@@ -1,11 +1,6 @@
 import request from '@/utils/request'
 import type { CommentPageVO, CommentVO } from '@/types/api'
 
-/** 某篇文章的评论树（保留给旧调用） */
-export function getCommentTree(articleId: number | string) {
-  return request.get<never, CommentVO[]>('/comments', { params: { articleId } })
-}
-
 /** 一级评论分页 */
 export function getCommentPage(params: {
   articleId: number | string

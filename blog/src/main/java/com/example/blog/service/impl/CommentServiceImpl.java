@@ -142,30 +142,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     }
     @Override
     @Transactional(readOnly = true)
-    public List<CommentVO> getCommentTree(Long articleId) {
-        requireVisibleArticle(articleId);
-        List<Comment> comments = lambdaQuery()
-                .eq(Comment::getArticleId, articleId)
-                .orderByAsc(Comment::getCreateTime)
-                .list();
-        if (comments.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<Long> userIds = comments.stream().map(Comment::getUserId).collect(Collectors.toSet());
-        comments.stream()
-                .map(Comment::getReplyToUserId)
-                .filter(id -> id != null && id != 0)
-                .forEach(userIds::add);
-        Map<Long, User> userMap = authorAssembler.loadUsers(userIds);
-        List<CommentVO> vos = comments.stream()
-                .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
-                .toList();
-        fillReplyToNicknames(vos, userMap);
-        return buildTree(vos);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public CommentPageVO pageComments(CommentPageDTO dto) {
         requireVisibleArticle(dto.getArticleId());
         Page<Comment> page = findRootCommentPage(dto);
