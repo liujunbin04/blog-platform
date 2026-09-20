@@ -10,6 +10,7 @@ import AppShell from '@/components/AppShell.vue'
 import EditorDocumentBar from '@/components/EditorDocumentBar.vue'
 import EditorMetadataFields from '@/components/EditorMetadataFields.vue'
 import EditorOutline from '@/components/EditorOutline.vue'
+import EditorPanels from '@/components/EditorPanels.vue'
 import EditorToolbar from '@/components/EditorToolbar.vue'
 import {
   countEditorStats,
@@ -177,23 +178,6 @@ watch(
       <el-form ref="formRef" :model="form" :rules="rules" class="editor-form">
         <EditorToolbar @apply="applyMarkdown" />
 
-        <nav class="tablet-editor-nav" aria-label="编辑与预览切换">
-          <button
-            type="button"
-            :class="{ active: mobilePanel === 'edit' }"
-            @click="mobilePanel = 'edit'"
-          >
-            编辑
-          </button>
-          <button
-            type="button"
-            :class="{ active: mobilePanel === 'preview' }"
-            @click="mobilePanel = 'preview'"
-          >
-            预览
-          </button>
-        </nav>
-
         <div class="editor-grid" :class="`mobile-panel-${mobilePanel}`">
           <EditorOutline class="desktop-outline" :items="outline" @navigate="navigateToLine" />
 
@@ -224,21 +208,13 @@ watch(
             </el-form-item>
           </section>
 
-          <section class="preview-panel">
-            <div class="panel-label">PREVIEW</div>
-            <div class="editor-preview markdown-body" v-html="previewHtml" />
-          </section>
-
-          <section class="mobile-outline-panel">
-            <EditorOutline :items="outline" @navigate="navigateToLine" />
-          </section>
-
-          <section class="mobile-info-panel">
-            <div class="panel-label">DOCUMENT</div>
-            <p>分类：{{ form.category || '未分类' }}</p>
-            <p>标签：{{ form.tags || '暂无标签' }}</p>
-            <p>状态：{{ form.status === 0 ? '草稿' : '已发布' }}</p>
-          </section>
+          <EditorPanels
+            v-model:mobile-panel="mobilePanel"
+            :preview-html="previewHtml"
+            :outline="outline"
+            :form="form"
+            @navigate="navigateToLine"
+          />
         </div>
       </el-form>
 
@@ -290,13 +266,6 @@ watch(
   box-shadow: var(--blog-shadow-sm);
 }
 
-.panel-label {
-  color: #a9becc;
-  font-family: var(--blog-font-mono);
-  font-size: 9px;
-  letter-spacing: 0.1em;
-}
-
 .draft-alert {
   margin: 0;
 }
@@ -311,18 +280,10 @@ watch(
   min-height: 620px;
 }
 
-.document-panel,
-.preview-panel {
+.document-panel {
   min-width: 0;
   padding: 20px 24px;
-}
-
-.document-panel {
   border-right: 1px solid var(--blog-line);
-}
-
-.preview-panel {
-  background: #f9fbfc;
 }
 
 .content-field {
@@ -347,10 +308,6 @@ watch(
   resize: vertical;
 }
 
-.editor-preview {
-  min-height: 520px;
-}
-
 .status-bar {
   min-height: 30px;
   display: flex;
@@ -364,36 +321,13 @@ watch(
   font-size: 9px;
 }
 
-.mobile-outline-panel,
-.mobile-info-panel,
-.tablet-editor-nav,
 .mobile-editor-nav {
   display: none;
 }
 
+/* .mobile-panel-* 挂在父级 .editor-grid 上，而面板在 EditorPanels 子组件作用域内，*/
+/* 因此这里用 :deep() 穿透样式边界来控制面板显隐。 */
 @media (max-width: 1199px) {
-  .tablet-editor-nav {
-    display: flex;
-    gap: 6px;
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--blog-line);
-    background: var(--blog-blueprint);
-  }
-
-  .tablet-editor-nav button {
-    min-width: 72px;
-    min-height: 32px;
-    border: 1px solid var(--blog-line);
-    background: var(--blog-paper);
-    color: var(--blog-ink-soft);
-  }
-
-  .tablet-editor-nav button.active {
-    border-color: var(--blog-ink);
-    background: var(--blog-ink);
-    color: var(--blog-paper);
-  }
-
   .editor-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -402,11 +336,11 @@ watch(
     display: none;
   }
 
-  .preview-panel {
+  .editor-grid :deep(.preview-panel) {
     display: none;
   }
 
-  .mobile-panel-preview .preview-panel {
+  .mobile-panel-preview :deep(.preview-panel) {
     display: block;
   }
 }
@@ -419,24 +353,18 @@ watch(
   }
 
   .document-panel,
-  .preview-panel,
-  .mobile-outline-panel,
-  .mobile-info-panel {
+  :deep(.preview-panel),
+  :deep(.mobile-outline-panel),
+  :deep(.mobile-info-panel) {
     display: none;
     padding: 16px;
   }
 
   .mobile-panel-edit .document-panel,
-  .mobile-panel-preview .preview-panel,
-  .mobile-panel-outline .mobile-outline-panel,
-  .mobile-panel-info .mobile-info-panel {
+  .mobile-panel-preview :deep(.preview-panel),
+  .mobile-panel-outline :deep(.mobile-outline-panel),
+  .mobile-panel-info :deep(.mobile-info-panel) {
     display: block;
-  }
-
-  .mobile-outline-panel :deep(.editor-outline) {
-    padding: 0;
-    border-right: 0;
-    background: transparent;
   }
 
   .mobile-editor-nav {
@@ -449,10 +377,6 @@ watch(
     grid-template-columns: repeat(4, 1fr);
     min-height: 54px;
     background: var(--blog-ink);
-  }
-
-  .tablet-editor-nav {
-    display: none;
   }
 
   .mobile-editor-nav button {
