@@ -3,6 +3,7 @@ package com.example.blog.service.impl;
 import com.example.blog.entity.Article;
 import com.example.blog.service.ArticleSearchVisibilityService;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.vo.ArticleSearchVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +20,8 @@ public class ArticleSearchVisibilityServiceImpl implements ArticleSearchVisibili
 
     private final ArticleService articleService;
 
+    private final ArticleVisibilityPolicy visibilityPolicy;
+
     @Override
     public List<ArticleSearchVO> filterVisible(List<ArticleSearchVO> hits) {
         if (hits.isEmpty()) {
@@ -30,15 +33,7 @@ public class ArticleSearchVisibilityServiceImpl implements ArticleSearchVisibili
         Map<Long, Article> byId = articleService.listByIds(ids).stream()
                 .collect(Collectors.toMap(Article::getId, Function.identity()));
         return hits.stream()
-                .filter(hit -> isPublic(byId.get(hit.getId())))
+                .filter(hit -> visibilityPolicy.isPublic(byId.get(hit.getId())))
                 .toList();
-    }
-
-    private boolean isPublic(Article article) {
-        return article != null
-                && article.getStatus() != null
-                && article.getStatus() == 1
-                && article.getHidden() != null
-                && article.getHidden() == 0;
     }
 }

@@ -13,6 +13,8 @@ import com.example.blog.entity.Comment;
 import com.example.blog.entity.User;
 import com.example.blog.mapper.CommentMapper;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.CommentService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
@@ -45,7 +47,9 @@ import java.util.stream.Collectors;
 public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> implements CommentService {
 
     private final ArticleService articleService;
+    private final ArticleVisibilityPolicy visibilityPolicy;
     private final UserService userService;
+    private final AuthorAssembler authorAssembler;
     private final RabbitTemplate rabbitTemplate;
 
     @Override
@@ -138,31 +142,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     }
     @Override
     @Transactional(readOnly = true)
-    public List<CommentVO> getCommentTree(Long articleId) {
-        requireVisibleArticle(articleId);
-        List<Comment> comments = lambdaQuery()
-                .eq(Comment::getArticleId, articleId)
-                .orderByAsc(Comment::getCreateTime)
-                .list();
-        if (comments.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<Long> userIds = comments.stream().map(Comment::getUserId).collect(Collectors.toSet());
-        comments.stream()
-                .map(Comment::getReplyToUserId)
-                .filter(id -> id != null && id != 0)
-                .forEach(userIds::add);
-        Map<Long, User> userMap = userService.listByIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
-        List<CommentVO> vos = comments.stream()
-                .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
-                .toList();
-        fillReplyToNicknames(vos, userMap);
-        return buildTree(vos);
-    }
-
-    @Override
-    @Transactional(readOnly = true)
     public CommentPageVO pageComments(CommentPageDTO dto) {
         requireVisibleArticle(dto.getArticleId());
         Page<Comment> page = findRootCommentPage(dto);
@@ -182,9 +161,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 userIds.add(comment.getReplyToUserId());
             }
         });
-        Map<Long, User> userMap = userIds.isEmpty() ? Map.of()
-                : userService.listByIds(userIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> userMap = authorAssembler.loadUsers(userIds);
         List<CommentVO> vos = all.stream()
                 .map(comment -> CommentVO.from(comment, userMap.get(comment.getUserId())))
                 .toList();
@@ -212,9 +189,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         if (article == null) {
             throw new BusinessException(404, "文章不存在");
         }
-        boolean restricted = article.getStatus() == null
-                || article.getStatus() != ArticleServiceImpl.STATUS_PUBLISHED
-                || (article.getHidden() != null && article.getHidden() == 1);
+        boolean restricted = !visibilityPolicy.isPublic(article);
         if (restricted) {
             Long userId = currentUserIdOrNull();
             if (userId == null || !userId.equals(article.getAuthorId())) {

@@ -3,6 +3,7 @@ package com.example.blog.service.impl;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.User;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.vo.ArticleVO;
@@ -40,6 +41,7 @@ public class HotArticleServiceImpl implements HotArticleService {
     private final StringRedisTemplate stringRedisTemplate;
     private final ArticleService articleService;
     private final UserService userService;
+    private final AuthorAssembler authorAssembler;
 
     @Override
     public void refreshHotArticles() {
@@ -107,12 +109,9 @@ public class HotArticleServiceImpl implements HotArticleService {
         // listByIds 不保序：建 Map 索引，按 ZSet 顺序组装（见收藏列表同款处理）
         Map<Long, Article> articleMap = articleService.listByIds(ids).stream()
                 .collect(Collectors.toMap(Article::getId, Function.identity()));
-        Set<Long> authorIds = articleMap.values().stream()
-                .map(Article::getAuthorId)
-                .collect(Collectors.toSet());
-        Map<Long, User> userMap = authorIds.isEmpty() ? Collections.emptyMap()
-                : userService.listByIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> userMap = authorAssembler.loadUsers(
+                articleMap.values().stream().map(Article::getAuthorId).toList()
+        );
 
         List<ArticleVO> list = new ArrayList<>();
         for (Long id : ids) {

@@ -8,16 +8,17 @@ import com.example.blog.common.PageResult;
 import com.example.blog.dto.ArticleDTO;
 import com.example.blog.dto.ArticlePageDTO;
 import com.example.blog.entity.Article;
-import com.example.blog.entity.ArticleDocument;
 import com.example.blog.entity.User;
 import com.example.blog.mapper.ArticleMapper;
 import com.example.blog.mapper.CommentMapper;
 import com.example.blog.mapper.FavoriteMapper;
 import com.example.blog.mapper.LikeRecordMapper;
 import com.example.blog.mapper.NotificationMapper;
-import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
+import com.example.blog.service.ArticleSearchSyncService;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
@@ -50,7 +51,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     private final UserService userService;
 
-    private final ArticleSearchRepository articleSearchRepository;
+    private final ArticleSearchSyncService articleSearchSyncService;
 
     /** 文章内容缓存（独立 Bean，避免类内自调用导致 @Cacheable 失效） */
     private final ArticleCacheService articleCacheService;
@@ -59,6 +60,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
     /** 浏览量计数：走 Redis 累加，详情页不再同步写数据库 */
     private final ViewCountService viewCountService;
+
+    private final ArticleVisibilityPolicy visibilityPolicy;
+
+    private final AuthorAssembler authorAssembler;
 
     // 硬删除文章时同步清理的关联数据（直接注入 Mapper，避免与各 Service 相互依赖）
     private final CommentMapper commentMapper;
@@ -82,8 +87,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 回读：create_time 由数据库默认值生成，需重新查询才能返回
         Article saved = getById(article.getId());
         // 已发布文章立即同步 ES（原来只靠 5 分钟定时任务，发布后短时间内搜索不到）
-        if (isPublic(saved)) {
-            indexToEsQuietly(saved);
+        if (visibilityPolicy.isPublic(saved)) {
+            articleSearchSyncService.sync(saved);
         }
         return ArticleVO.from(saved, currentUser());
     }
@@ -104,10 +109,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         updateById(article);
         Article saved = getById(id);
         // ES 与可见性保持一致：公开中 → 建索引；草稿/已隐藏 → 删索引（搜索不可见）
-        if (isPublic(saved)) {
-            indexToEsQuietly(saved);
+        if (visibilityPolicy.isPublic(saved)) {
+            articleSearchSyncService.sync(saved);
         } else {
-            deleteFromEsQuietly(id);
+            articleSearchSyncService.remove(id);
         }
         return ArticleVO.from(saved, currentUser());
     }
@@ -127,7 +132,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         baseMapper.hardDeleteById(id);
         // 同步删除 ES 文档（ES 操作在 MySQL 事务之外、失败不会回滚，
         // 失败仅记日志：下次启动的全量回填会以数据库为准纠正索引）
-        deleteFromEsQuietly(id);
+        articleSearchSyncService.remove(id);
         // 清掉 Redis 里的浏览量计数，否则回写任务会不断尝试更新一个已不存在的行
         viewCountService.remove(id);
     }
@@ -137,7 +142,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public void hideArticle(Long id) {
         transitionHidden(id, 0, 1, "文章不是公开状态，无法隐藏");
         // 从 ES 移除：隐藏的文章不应再被搜索到
-        deleteFromEsQuietly(id);
+        articleSearchSyncService.remove(id);
     }
 
     @Override
@@ -145,7 +150,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public void unhideArticle(Long id) {
         transitionHidden(id, 1, 0, "文章不是隐藏状态，无法公开");
         // 重新公开 → 重建 ES 索引
-        indexToEsQuietly(getById(id));
+        articleSearchSyncService.sync(getById(id));
     }
 
     /**
@@ -166,38 +171,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .update();
     }
 
-    /**
-     * 文章当前是否对外公开（已发布且未隐藏）：决定是否进 ES 与列表/搜索可见性
-     */
-    private boolean isPublic(Article article) {
-        return article.getStatus() != null && article.getStatus() == STATUS_PUBLISHED
-                && (article.getHidden() == null || article.getHidden() == 0);
-    }
-
-    /**
-     * 同步文章到 ES（静默失败）：ES 不可用不影响发布/更新主流程，
-     * ArticleSyncTask 的定时任务与启动回填会最终把索引修正
-     */
-    private void indexToEsQuietly(Article article) {
-        try {
-            User author = userService.getById(article.getAuthorId());
-            String nickname = author == null ? null : author.getNickname();
-            articleSearchRepository.save(ArticleDocument.from(article, nickname));
-        } catch (Exception e) {
-            log.error("文章同步到 ES 失败（不影响主流程）: articleId={}", article.getId(), e);
-        }
-    }
-
-    /**
-     * 从 ES 删除文档（静默失败，语义同 indexToEsQuietly）
-     */
-    private void deleteFromEsQuietly(Long id) {
-        try {
-            articleSearchRepository.deleteById(id);
-        } catch (Exception e) {
-            log.error("删除 ES 文档失败（不影响主流程）: articleId={}", id, e);
-        }
-    }
 
     @Override
     public PageResult<ArticleVO> pageArticles(ArticlePageDTO dto) {
@@ -221,12 +194,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Page<Article> page = page(new Page<>(dto.getPageNum(), dto.getPageSize()), wrapper);
 
         // 批量查询作者并组装，一次 IN 查询代替逐条查（避免 N+1）
-        Set<Long> authorIds = page.getRecords().stream()
-                .map(Article::getAuthorId)
-                .collect(Collectors.toSet());
-        Map<Long, User> authorMap = authorIds.isEmpty() ? Collections.emptyMap()
-                : userService.listByIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> authorMap = authorAssembler.loadUsers(
+                page.getRecords().stream().map(Article::getAuthorId).toList()
+        );
 
         List<ArticleVO> list = page.getRecords().stream()
                 .map(a -> ArticleVO.from(a, authorMap.get(a.getAuthorId())))
@@ -307,7 +277,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Article article = getById(id);
         // 与 getDetail 的可见性策略一致：非公开一律按「文章不存在」处理，
         // 防止通过互动接口枚举草稿 / 已隐藏的文章
-        if (article == null || !isPublic(article)) {
+        if (article == null || !visibilityPolicy.isPublic(article)) {
             throw new BusinessException(404, "文章不存在");
         }
         return article;

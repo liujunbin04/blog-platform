@@ -5,6 +5,8 @@ import com.example.blog.entity.Article;
 import com.example.blog.entity.Comment;
 import com.example.blog.mapper.CommentMapper;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.UserService;
 import com.example.blog.vo.CommentPageVO;
 import org.junit.jupiter.api.Test;
@@ -32,6 +34,9 @@ class CommentPagingServiceImplTest {
     @Mock
     private CommentMapper commentMapper;
 
+    @Mock
+    private ArticleVisibilityPolicy visibilityPolicy;
+
     @InjectMocks
     private CommentServiceImpl service;
 
@@ -43,6 +48,8 @@ class CommentPagingServiceImplTest {
         article.setHidden(0);
         when(articleService.getById(7L)).thenReturn(article);
         ReflectionTestUtils.setField(service, "baseMapper", commentMapper);
+        ReflectionTestUtils.setField(service, "visibilityPolicy", new ArticleVisibilityPolicy());
+        ReflectionTestUtils.setField(service, "authorAssembler", new AuthorAssembler(userService));
 
         CommentPageDTO dto = new CommentPageDTO();
         dto.setArticleId(7L);

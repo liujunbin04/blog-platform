@@ -9,6 +9,7 @@ import com.example.blog.entity.Notification;
 import com.example.blog.entity.User;
 import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.service.NotificationService;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.NotificationPageVO;
@@ -33,6 +34,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
         implements NotificationService {
 
     private final UserService userService;
+    private final AuthorAssembler authorAssembler;
 
     @Override
     @Transactional
@@ -81,8 +83,7 @@ public class NotificationServiceImpl extends ServiceImpl<NotificationMapper, Not
             Set<Long> senderIds = records.stream()
                     .map(Notification::getSenderId)
                     .collect(Collectors.toSet());
-            Map<Long, User> senderMap = userService.listByIds(senderIds).stream()
-                    .collect(Collectors.toMap(User::getId, Function.identity()));
+            Map<Long, User> senderMap = authorAssembler.loadUsers(senderIds);
             vo.setList(records.stream()
                     .map(n -> NotificationVO.from(n, senderMap.get(n.getSenderId())))
                     .toList());

@@ -2,6 +2,7 @@ package com.example.blog.service.impl;
 
 import com.example.blog.entity.Article;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.vo.ArticleSearchVO;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -41,6 +42,11 @@ class ArticleSearchVisibilityServiceImplTest {
         visibleArticle.setHidden(0);
         when(articleService.listByIds(anyCollection()))
                 .thenReturn(List.of(hiddenArticle, visibleArticle));
+        org.springframework.test.util.ReflectionTestUtils.setField(
+                service,
+                "visibilityPolicy",
+                new ArticleVisibilityPolicy()
+        );
 
         List<ArticleSearchVO> result = service.filterVisible(List.of(hidden, visible));
 

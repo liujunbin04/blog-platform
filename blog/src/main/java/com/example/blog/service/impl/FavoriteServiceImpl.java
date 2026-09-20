@@ -11,6 +11,7 @@ import com.example.blog.entity.Favorite;
 import com.example.blog.entity.User;
 import com.example.blog.mapper.FavoriteMapper;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.FavoriteService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
@@ -37,6 +38,7 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
 
     private final ArticleService articleService;
     private final UserService userService;
+    private final AuthorAssembler authorAssembler;
 
     @Override
     @Transactional
@@ -107,14 +109,9 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
         Map<Long, Article> articleMap = articleService.listByIds(articleIds).stream()
                 .collect(Collectors.toMap(Article::getId, Function.identity()));
         // 3. 批量查作者
-        Set<Long> authorIds = articleMap.values().stream()
-                .map(Article::getAuthorId)
-                .collect(Collectors.toSet());
-        // 注意：listByIds 传空集合会生成 IN () 非法 SQL，必须判空
-        // （收藏的文章全被逻辑删除时，articleMap 为空，authorIds 即为空集合）
-        Map<Long, User> userMap = authorIds.isEmpty() ? Collections.emptyMap()
-                : userService.listByIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> userMap = authorAssembler.loadUsers(
+                articleMap.values().stream().map(Article::getAuthorId).toList()
+        );
         // 4. 按收藏顺序组装（文章已被逻辑删除的收藏直接跳过；
         //    如需清理这类脏记录，可在此物理删除）
         List<FavoriteVO> list = new ArrayList<>();

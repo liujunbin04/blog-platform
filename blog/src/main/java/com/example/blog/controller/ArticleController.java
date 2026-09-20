@@ -7,13 +7,9 @@ import com.example.blog.dto.ArticleDTO;
 import com.example.blog.dto.ArticlePageDTO;
 import com.example.blog.dto.ArticleSearchDTO;
 import com.example.blog.entity.Article;
-import com.example.blog.entity.ArticleDocument;
-import com.example.blog.entity.User;
-import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
-import com.example.blog.service.ArticleSearchVisibilityService;
+import com.example.blog.service.ArticleSearchQueryService;
 import com.example.blog.service.HotArticleService;
-import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.ArticleSearchVO;
 import com.example.blog.vo.ArticleVO;
@@ -21,7 +17,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.elasticsearch.core.SearchHits;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,13 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * 文章接口（全部需要登录，见 SecurityConfig）
@@ -50,11 +39,7 @@ public class ArticleController {
 
     private final ArticleService articleService;
 
-    private final ArticleSearchRepository articleSearchRepository;
-
-    private final ArticleSearchVisibilityService articleSearchVisibilityService;
-
-    private final UserService userService;
+    private final ArticleSearchQueryService articleSearchQueryService;
 
     private final HotArticleService hotArticleService;
 
@@ -115,28 +100,7 @@ public class ArticleController {
      */
     @GetMapping("/search")
     public Result<PageResult<ArticleSearchVO>> search(@Valid ArticleSearchDTO dto) {
-        SearchHits<ArticleDocument> hits = articleSearchRepository
-                .searchByKeyword(dto.getKeyword(), dto.getPage(), dto.getSize());
-        List<ArticleSearchVO> list = hits.getSearchHits().stream()
-                .map(ArticleSearchVO::from)
-                .toList();
-        list = articleSearchVisibilityService.filterVisible(list);
-        // 批量回查作者：与列表页相同的防 N+1 模式；
-        // 全部作者已被逻辑删除时 authorIds 可能为空集合，listByIds 传空会生成非法 SQL，必须判空
-        Set<Long> authorIds = list.stream()
-                .map(ArticleSearchVO::getAuthorId)
-                .filter(Objects::nonNull)
-                .collect(Collectors.toSet());
-        Map<Long, User> userMap = authorIds.isEmpty() ? Collections.emptyMap()
-                : userService.listByIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
-        ArticleSearchVO.fillAuthors(list, userMap);
-        return Result.success(PageResult.of(
-                list,
-                hits.getTotalHits(),
-                dto.getPage().longValue(),
-                dto.getSize().longValue()
-        ));
+        return Result.success(articleSearchQueryService.search(dto));
     }
 
     /**
