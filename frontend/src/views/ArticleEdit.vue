@@ -7,6 +7,7 @@ import MarkdownIt from 'markdown-it'
 
 import { getArticleEditData, publishArticle, updateArticle, type ArticleFormData } from '@/api/article'
 import AppShell from '@/components/AppShell.vue'
+import EditorDocumentBar from '@/components/EditorDocumentBar.vue'
 import EditorOutline from '@/components/EditorOutline.vue'
 import EditorToolbar from '@/components/EditorToolbar.vue'
 import {
@@ -151,16 +152,17 @@ watch(
 <template>
   <AppShell variant="workspace">
     <div v-loading="pageLoading" class="editor-app">
-      <header class="document-bar">
-        <el-button link @click="router.back()">返回</el-button>
-        <span class="document-state">{{ articleId ? 'EDITING' : 'DRAFT' }}</span>
-        <strong class="document-title">{{ form.title || '未命名文章' }}</strong>
-        <span class="document-count">{{ editorStats.characters }} 字</span>
-        <el-button v-if="showDraftButton" :disabled="saving" @click="onSubmit(0)">存草稿</el-button>
-        <el-button type="primary" :loading="saving" @click="onSubmit(1)">
-          {{ articleId && loadedStatus === 1 ? '保存修改' : '发布文章' }}
-        </el-button>
-      </header>
+      <EditorDocumentBar
+        :is-editing="Boolean(articleId)"
+        :title="form.title"
+        :character-count="editorStats.characters"
+        :saving="saving"
+        :show-draft-button="showDraftButton"
+        :primary-label="articleId && loadedStatus === 1 ? '保存修改' : '发布文章'"
+        @back="router.back()"
+        @save-draft="onSubmit(0)"
+        @save-publish="onSubmit(1)"
+      />
 
       <el-alert
         v-if="articleId && loadedStatus === 0"
@@ -298,34 +300,11 @@ watch(
   box-shadow: var(--blog-shadow-sm);
 }
 
-.document-bar {
-  min-height: 54px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 0 16px;
-  background: var(--blog-ink);
-  color: var(--blog-paper);
-}
-
-.document-state,
-.document-count,
 .panel-label {
   color: #a9becc;
   font-family: var(--blog-font-mono);
   font-size: 9px;
   letter-spacing: 0.1em;
-}
-
-.document-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.document-count {
-  margin-left: auto;
 }
 
 .draft-alert {
@@ -461,19 +440,6 @@ watch(
 }
 
 @media (max-width: 767px) {
-  .document-bar {
-    flex-wrap: wrap;
-    padding-block: 8px;
-  }
-
-  .document-title {
-    flex: 1;
-  }
-
-  .document-count {
-    display: none;
-  }
-
   .editor-grid {
     display: block;
     min-height: 560px;
