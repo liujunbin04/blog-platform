@@ -4,6 +4,7 @@ import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.UserService;
 import com.example.blog.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +36,7 @@ public class ArticleSyncTask {
     private final ArticleService articleService;
     private final ArticleSearchRepository articleSearchRepository;
     private final UserService userService;
+    private final ArticleVisibilityPolicy visibilityPolicy;
 
     /**
      * 应用启动完成后全量回填 ES 索引（saveAll 为按 id 的幂等 upsert）：
@@ -66,18 +68,10 @@ public class ArticleSyncTask {
     private void reconcileSearchVisibility() {
         articleSearchRepository.findAll().forEach(document -> {
             Article article = articleService.getById(document.getId());
-            if (!isPublic(article)) {
+            if (!visibilityPolicy.isPublic(article)) {
                 articleSearchRepository.deleteById(document.getId());
             }
         });
-    }
-
-    private boolean isPublic(Article article) {
-        return article != null
-                && article.getStatus() != null
-                && article.getStatus() == 1
-                && article.getHidden() != null
-                && article.getHidden() == 0;
     }
 
     /**

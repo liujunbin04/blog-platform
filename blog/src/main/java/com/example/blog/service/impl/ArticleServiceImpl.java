@@ -18,6 +18,7 @@ import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
@@ -60,6 +61,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     /** 浏览量计数：走 Redis 累加，详情页不再同步写数据库 */
     private final ViewCountService viewCountService;
 
+    private final ArticleVisibilityPolicy visibilityPolicy;
+
     // 硬删除文章时同步清理的关联数据（直接注入 Mapper，避免与各 Service 相互依赖）
     private final CommentMapper commentMapper;
     private final LikeRecordMapper likeRecordMapper;
@@ -82,7 +85,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 回读：create_time 由数据库默认值生成，需重新查询才能返回
         Article saved = getById(article.getId());
         // 已发布文章立即同步 ES（原来只靠 5 分钟定时任务，发布后短时间内搜索不到）
-        if (isPublic(saved)) {
+        if (visibilityPolicy.isPublic(saved)) {
             indexToEsQuietly(saved);
         }
         return ArticleVO.from(saved, currentUser());
@@ -104,7 +107,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         updateById(article);
         Article saved = getById(id);
         // ES 与可见性保持一致：公开中 → 建索引；草稿/已隐藏 → 删索引（搜索不可见）
-        if (isPublic(saved)) {
+        if (visibilityPolicy.isPublic(saved)) {
             indexToEsQuietly(saved);
         } else {
             deleteFromEsQuietly(id);
@@ -166,13 +169,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 .update();
     }
 
-    /**
-     * 文章当前是否对外公开（已发布且未隐藏）：决定是否进 ES 与列表/搜索可见性
-     */
-    private boolean isPublic(Article article) {
-        return article.getStatus() != null && article.getStatus() == STATUS_PUBLISHED
-                && (article.getHidden() == null || article.getHidden() == 0);
-    }
 
     /**
      * 同步文章到 ES（静默失败）：ES 不可用不影响发布/更新主流程，
@@ -307,7 +303,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Article article = getById(id);
         // 与 getDetail 的可见性策略一致：非公开一律按「文章不存在」处理，
         // 防止通过互动接口枚举草稿 / 已隐藏的文章
-        if (article == null || !isPublic(article)) {
+        if (article == null || !visibilityPolicy.isPublic(article)) {
             throw new BusinessException(404, "文章不存在");
         }
         return article;

@@ -9,6 +9,7 @@ import com.example.blog.mapper.LikeRecordMapper;
 import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleCacheService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +65,7 @@ class ArticleServiceImplTest {
     void setUp() {
         // ServiceImpl 的 baseMapper 由 MyBatis-Plus 注入，单测中手动装配
         ReflectionTestUtils.setField(articleService, "baseMapper", articleMapper);
+        ReflectionTestUtils.setField(articleService, "visibilityPolicy", new ArticleVisibilityPolicy());
     }
 
     @Test

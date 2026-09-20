@@ -5,6 +5,7 @@ import com.example.blog.entity.ArticleDocument;
 import com.example.blog.entity.User;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.UserService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,9 @@ class ArticleSyncTaskTest {
     @Mock
     private UserService userService;
 
+    @Mock
+    private ArticleVisibilityPolicy visibilityPolicy;
+
     @InjectMocks
     private ArticleSyncTask task;
 
@@ -39,6 +43,7 @@ class ArticleSyncTaskTest {
         stale.setId(8L);
         when(articleSearchRepository.findAll()).thenReturn(List.of(stale));
         when(articleService.getById(8L)).thenReturn(null);
+        when(visibilityPolicy.isPublic(null)).thenReturn(false);
         when(articleService.lambdaQuery()).thenThrow(new RuntimeException("stop after reconciliation"));
 
         task.backfillSearchIndex();
