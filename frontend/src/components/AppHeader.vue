@@ -4,9 +4,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
-import { ArrowDown, Bell, Search } from '@element-plus/icons-vue'
+import { ArrowDown, Bell } from '@element-plus/icons-vue'
 
 import { clearNotifications, getNotifications, markAllNotifications } from '@/api/notification'
+import HeaderNav from '@/components/HeaderNav.vue'
 import { useUserStore } from '@/stores/user'
 import type { NotificationVO } from '@/types/api'
 
@@ -101,30 +102,13 @@ watch(
 <template>
   <div class="app-header">
     <div class="header-inner">
-      <button class="brand" type="button" @click="goArticles">我的博客</button>
-
-      <nav class="primary-nav" aria-label="文章导航">
-        <button class="nav-link" :class="{ 'is-active': !isHot }" type="button" @click="goArticles">
-          发现
-        </button>
-        <button class="nav-link" :class="{ 'is-active': isHot }" type="button" @click="goHot">
-          热榜
-        </button>
-      </nav>
-
-      <div class="search-wrap">
-        <el-input
-          v-model="keyword"
-          class="search"
-          placeholder="搜索文章、作者或标签"
-          clearable
-          @keyup.enter="onSearch"
-        >
-          <template #prefix>
-            <el-icon><Search /></el-icon>
-          </template>
-        </el-input>
-      </div>
+      <HeaderNav
+        v-model:keyword="keyword"
+        :is-hot="isHot"
+        @search="onSearch"
+        @go-articles="goArticles"
+        @go-hot="goHot"
+      />
 
       <div class="actions">
         <template v-if="userStore.isLoggedIn">
@@ -215,48 +199,12 @@ watch(
   gap: 24px;
 }
 
-.brand,
-.nav-link,
 .icon-button,
 .user-trigger {
   border: 0;
   background: transparent;
   color: inherit;
   cursor: pointer;
-}
-
-.brand {
-  font-family: var(--blog-font-display);
-  font-size: 19px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.primary-nav {
-  display: inline-flex;
-  align-self: stretch;
-}
-
-.nav-link {
-  padding: 0 5px;
-  color: var(--blog-muted);
-  font-size: 13px;
-}
-
-.nav-link.is-active {
-  color: var(--blog-ink);
-  box-shadow: inset 0 -2px var(--blog-red);
-}
-
-.search-wrap {
-  flex: 1;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.search {
-  width: 100%;
-  max-width: 360px;
 }
 
 .actions {
@@ -323,17 +271,9 @@ watch(
 }
 
 @media (max-width: 900px) {
-  .primary-nav {
-    display: none;
-  }
-
   .header-inner {
     gap: 10px;
     padding: 0 14px;
-  }
-
-  .search {
-    max-width: none;
   }
 }
 
@@ -342,15 +282,6 @@ watch(
     min-height: 58px;
     flex-wrap: wrap;
     padding-block: 8px;
-  }
-
-  .brand {
-    margin-right: auto;
-  }
-
-  .search-wrap {
-    order: 3;
-    flex-basis: 100%;
   }
 
   .publish-button {
