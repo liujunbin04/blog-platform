@@ -949,10 +949,10 @@ git commit -m "docs: 完成后端结构收敛验证"
 
 ## 验收清单
 
-- [ ] 文章公开性判断只通过 `ArticleVisibilityPolicy`。
-- [ ] 作者批量查询和作者 VO 转换只通过 `AuthorAssembler`。
-- [ ] ES 同步、删除和对账只通过 `ArticleSearchSyncService`。
-- [ ] 搜索 Controller 不再直接处理 ES 与作者回填。
-- [ ] 旧评论整树接口和前端调用已删除。
-- [ ] 评论分页、文章列表、热门、搜索、收藏和通知行为不变。
-- [ ] 后端测试、前端测试和静态检查全部通过。
+- [x] 文章公开性判断只通过 `ArticleVisibilityPolicy`。
+- [x] 作者批量查询和作者 VO 转换只通过 `AuthorAssembler`。
+- [x] ES 同步、删除和对账只通过 `ArticleSearchSyncService`。
+- [x] 搜索 Controller 不再直接处理 ES 与作者回填。
+- [x] 旧评论整树接口和前端调用已删除。
+- [x] 评论分页、文章列表、热门、搜索、收藏和通知行为不变。
+- [x] 后端测试、前端测试和静态检查全部通过。
