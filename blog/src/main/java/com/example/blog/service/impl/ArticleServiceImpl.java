@@ -19,6 +19,7 @@ import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
@@ -62,6 +63,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private final ViewCountService viewCountService;
 
     private final ArticleVisibilityPolicy visibilityPolicy;
+
+    private final AuthorAssembler authorAssembler;
 
     // 硬删除文章时同步清理的关联数据（直接注入 Mapper，避免与各 Service 相互依赖）
     private final CommentMapper commentMapper;
@@ -217,12 +220,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         Page<Article> page = page(new Page<>(dto.getPageNum(), dto.getPageSize()), wrapper);
 
         // 批量查询作者并组装，一次 IN 查询代替逐条查（避免 N+1）
-        Set<Long> authorIds = page.getRecords().stream()
-                .map(Article::getAuthorId)
-                .collect(Collectors.toSet());
-        Map<Long, User> authorMap = authorIds.isEmpty() ? Collections.emptyMap()
-                : userService.listByIds(authorIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> authorMap = authorAssembler.loadUsers(
+                page.getRecords().stream().map(Article::getAuthorId).toList()
+        );
 
         List<ArticleVO> list = page.getRecords().stream()
                 .map(a -> ArticleVO.from(a, authorMap.get(a.getAuthorId())))

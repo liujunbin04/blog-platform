@@ -14,6 +14,7 @@ import com.example.blog.entity.User;
 import com.example.blog.mapper.CommentMapper;
 import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
+import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.CommentService;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
@@ -48,6 +49,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     private final ArticleService articleService;
     private final ArticleVisibilityPolicy visibilityPolicy;
     private final UserService userService;
+    private final AuthorAssembler authorAssembler;
     private final RabbitTemplate rabbitTemplate;
 
     @Override
@@ -154,8 +156,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 .map(Comment::getReplyToUserId)
                 .filter(id -> id != null && id != 0)
                 .forEach(userIds::add);
-        Map<Long, User> userMap = userService.listByIds(userIds).stream()
-                .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> userMap = authorAssembler.loadUsers(userIds);
         List<CommentVO> vos = comments.stream()
                 .map(c -> CommentVO.from(c, userMap.get(c.getUserId())))
                 .toList();
@@ -184,9 +185,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                 userIds.add(comment.getReplyToUserId());
             }
         });
-        Map<Long, User> userMap = userIds.isEmpty() ? Map.of()
-                : userService.listByIds(userIds).stream()
-                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        Map<Long, User> userMap = authorAssembler.loadUsers(userIds);
         List<CommentVO> vos = all.stream()
                 .map(comment -> CommentVO.from(comment, userMap.get(comment.getUserId())))
                 .toList();
