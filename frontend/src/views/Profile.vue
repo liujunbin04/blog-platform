@@ -9,6 +9,7 @@ import 'element-plus/es/components/message-box/style/css'
 import { deleteArticle, getMyArticles, hideArticle, unhideArticle } from '@/api/article'
 import { getMyFavorites, unfavoriteArticle } from '@/api/favorite'
 import AppShell from '@/components/AppShell.vue'
+import ProfileArticleLedger from '@/components/ProfileArticleLedger.vue'
 import { useUserStore } from '@/stores/user'
 import type { ArticleVO, FavoriteVO } from '@/types/api'
 import { formatDateTime } from '@/utils/format'
@@ -131,64 +132,29 @@ onMounted(loadMyArticles)
 
       <el-tabs v-model="activeTab" @tab-change="onTabChange">
         <el-tab-pane label="我的文章" name="articles">
-          <el-skeleton v-if="myLoading && myList.length === 0" :rows="6" animated />
-          <el-empty v-else-if="myList.length === 0" description="你还没有文章">
-            <el-button type="primary" @click="router.push('/publish')">写第一篇文章</el-button>
-          </el-empty>
-
-          <div v-else class="ledger">
-            <div class="ledger-head">
-              <span>文章</span>
-              <span>状态</span>
-              <span>数据</span>
-              <span>操作</span>
-            </div>
-            <article v-for="row in myList" :key="row.id" class="ledger-row">
-              <div class="ledger-title">
-                <button type="button" @click="router.push(`/articles/${row.id}`)">
-                  {{ row.title }}
-                </button>
-                <span>{{ row.category || '未分类' }} · {{ formatDateTime(row.createTime) }}</span>
-              </div>
-              <el-tag v-if="row.status === 0" size="small" type="warning">草稿</el-tag>
-              <el-tag v-else-if="row.hidden === 1" size="small" type="info">已隐藏</el-tag>
-              <el-tag v-else size="small" type="success">已发布</el-tag>
-              <div class="ledger-data">{{ row.viewCount }} 浏览<br />{{ row.likeCount }} 点赞</div>
-              <div class="ledger-actions">
-                <el-button link type="primary" @click="router.push(`/publish/${row.id}`)">
-                  编辑
-                </el-button>
-                <el-button
-                  v-if="row.status === 1 && row.hidden !== 1"
-                  link
-                  type="warning"
-                  @click="onToggleHide(row)"
-                >
-                  隐藏
-                </el-button>
-                <el-button
-                  v-else-if="row.status === 1 && row.hidden === 1"
-                  link
-                  type="success"
-                  @click="onToggleHide(row)"
-                >
-                  公开
-                </el-button>
-                <el-button link type="danger" @click="onDeleteArticle(row)">删除</el-button>
-              </div>
-            </article>
-          </div>
-
-          <el-pagination
-            v-if="myTotal > 0"
-            v-model:current-page="myPage.pageNum"
-            v-model:page-size="myPage.pageSize"
+          <ProfileArticleLedger
+            :list="myList"
             :total="myTotal"
-            :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next"
-            class="pagination"
-            @current-change="loadMyArticles"
+            :page="myPage"
+            :loading="myLoading"
+            @update:page="
+              (value) => {
+                myPage.pageNum = value.pageNum
+                myPage.pageSize = value.pageSize
+              }
+            "
+            @page-change="
+              (page) => {
+                myPage.pageNum = page
+                loadMyArticles()
+              }
+            "
             @size-change="onMySizeChange"
+            @create="router.push('/publish')"
+            @edit="(row) => router.push(`/publish/${row.id}`)"
+            @delete="onDeleteArticle"
+            @toggle-hide="onToggleHide"
+            @open="(row) => router.push(`/articles/${row.id}`)"
           />
         </el-tab-pane>
 
