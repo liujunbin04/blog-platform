@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 import { getArticlePage, getHotArticles, searchArticles } from '@/api/article'
 import ArticleListItem from '@/components/ArticleListItem.vue'
 import AppShell from '@/components/AppShell.vue'
 import ContextRail from '@/components/ContextRail.vue'
+import PaginationBar from '@/components/PaginationBar.vue'
 import type { ArticleSearchVO, ArticleVO } from '@/types/api'
+import type { PageState } from '@/types/pagination'
 
 type ListItem = ArticleVO & Partial<Pick<ArticleSearchVO, 'contentSnippet'>>
 
@@ -17,8 +19,7 @@ const loading = ref(false)
 const list = ref<ListItem[]>([])
 const hotList = ref<ArticleVO[]>([])
 const total = ref(0)
-const pageNum = ref(1)
-const pageSize = ref(10)
+const pagination = reactive<PageState>({ pageNum: 1, pageSize: 10 })
 const sort = ref<'time' | 'hot'>(route.query.sort === 'hot' ? 'hot' : 'time')
 const keyword = ref((route.query.keyword as string) ?? '')
 const lastParams = ref('')
@@ -29,8 +30,8 @@ const remainingArticles = computed(() => list.value.slice(1))
 async function load() {
   const params = JSON.stringify({
     kw: keyword.value.trim(),
-    page: pageNum.value,
-    size: pageSize.value,
+    page: pagination.pageNum,
+    size: pagination.pageSize,
     sort: sort.value,
   })
   if (params === lastParams.value) return
@@ -39,10 +40,14 @@ async function load() {
   try {
     const value = keyword.value.trim()
     const page = value
-      ? await searchArticles({ keyword: value, page: pageNum.value, size: pageSize.value })
+      ? await searchArticles({
+          keyword: value,
+          page: pagination.pageNum,
+          size: pagination.pageSize,
+        })
       : await getArticlePage({
-          pageNum: pageNum.value,
-          pageSize: pageSize.value,
+          pageNum: pagination.pageNum,
+          pageSize: pagination.pageSize,
           sort: sort.value,
         })
     lastParams.value = params
@@ -64,8 +69,14 @@ async function loadHotArticles() {
 }
 
 function resetAndLoad() {
-  pageNum.value = 1
+  pagination.pageNum = 1
   load()
+}
+
+/** 分页组件只上报「下一页状态」，这里写回后由下方 watch 统一触发加载 */
+function onPageChange(next: PageState) {
+  pagination.pageNum = next.pageNum
+  pagination.pageSize = next.pageSize
 }
 
 function onClearKeyword() {
@@ -98,7 +109,7 @@ watch(sort, (value) => {
   router.replace({ path: '/articles', query })
 })
 
-watch([pageNum, pageSize, () => sort.value], load)
+watch([() => pagination.pageNum, () => pagination.pageSize, () => sort.value], load)
 
 onMounted(() => {
   load()
@@ -150,15 +161,7 @@ onMounted(() => {
             />
           </template>
 
-          <el-pagination
-            v-if="total > 0"
-            v-model:current-page="pageNum"
-            v-model:page-size="pageSize"
-            :total="total"
-            :page-sizes="[10, 20, 50]"
-            layout="total, sizes, prev, pager, next"
-            class="pagination"
-          />
+          <PaginationBar :page="pagination" :total="total" @change="onPageChange" />
         </section>
 
         <ContextRail>
@@ -267,11 +270,6 @@ onMounted(() => {
   font-size: 11px;
 }
 
-.pagination {
-  justify-content: center;
-  margin-top: 24px;
-}
-
 @media (max-width: 1199px) {
   .list-layout {
     grid-template-columns: 1fr;
@@ -286,16 +284,6 @@ onMounted(() => {
   .toolbar {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .pagination {
-    justify-content: flex-start;
-    overflow-x: auto;
-  }
-
-  .pagination :deep(.el-pagination__sizes),
-  .pagination :deep(.el-pagination__total) {
-    display: none;
   }
 }
 </style>
