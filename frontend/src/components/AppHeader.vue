@@ -3,10 +3,10 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
-import { ArrowDown } from '@element-plus/icons-vue'
 
 import HeaderNav from '@/components/HeaderNav.vue'
 import HeaderNotifications from '@/components/HeaderNotifications.vue'
+import HeaderUserMenu from '@/components/HeaderUserMenu.vue'
 import { useUserStore } from '@/stores/user'
 
 const route = useRoute()
@@ -17,6 +17,10 @@ const keyword = ref('')
 
 const isHot = computed(
   () => route.path === '/articles' && route.query.sort === 'hot',
+)
+
+const displayName = computed(
+  () => userStore.user?.nickname || userStore.user?.username || '',
 )
 
 function goArticles() {
@@ -58,31 +62,22 @@ function onUserCommand(command: string) {
       <div class="actions">
         <template v-if="userStore.isLoggedIn">
           <HeaderNotifications />
-
-          <el-button class="publish-button" type="primary" @click="router.push('/publish')">
-            写文章
-          </el-button>
-
-          <el-dropdown @command="onUserCommand">
-            <button class="user-trigger" type="button" aria-label="账户菜单">
-              <span class="user-avatar">
-                {{ (userStore.user?.nickname || userStore.user?.username || '?').charAt(0) }}
-              </span>
-              <el-icon><ArrowDown /></el-icon>
-            </button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+          <HeaderUserMenu
+            :is-logged-in="userStore.isLoggedIn"
+            :nickname="displayName"
+            @publish="router.push('/publish')"
+            @profile="onUserCommand('profile')"
+            @logout="onUserCommand('logout')"
+          />
         </template>
 
-        <template v-else>
-          <el-button @click="router.push('/login')">登录</el-button>
-          <el-button type="primary" @click="router.push('/register')">注册</el-button>
-        </template>
+        <HeaderUserMenu
+          v-else
+          :is-logged-in="userStore.isLoggedIn"
+          :nickname="displayName"
+          @login="router.push('/login')"
+          @register="router.push('/register')"
+        />
       </div>
     </div>
   </div>
@@ -106,41 +101,10 @@ function onUserCommand(command: string) {
   gap: 24px;
 }
 
-.user-trigger {
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-
 .actions {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-
-.user-trigger {
-  min-width: 40px;
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.user-trigger {
-  gap: 3px;
-}
-
-.user-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--blog-moss);
-  color: var(--blog-moss-ink);
-  font-weight: 700;
 }
 
 @media (max-width: 900px) {
@@ -155,10 +119,6 @@ function onUserCommand(command: string) {
     min-height: 58px;
     flex-wrap: wrap;
     padding-block: 8px;
-  }
-
-  .publish-button {
-    display: none;
   }
 }
 </style>
