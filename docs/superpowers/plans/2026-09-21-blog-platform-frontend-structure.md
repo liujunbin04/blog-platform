@@ -356,7 +356,12 @@ git commit -m "refactor(frontend): 抽出文章详情右侧栏"
 
 - [ ] **Step 1: 创建 ArticleComments 组件**
 
-创建 `frontend/src/components/ArticleComments.vue`。组件内部持有 `commentContent`，提交时通过 `submit` 事件带出内容：
+创建 `frontend/src/components/ArticleComments.vue`。组件内部持有 `commentContent`，提交时通过 `submit` 事件带出内容。
+
+两个必须保留的原有行为（执行时曾遗漏，已修正）：
+
+- 内容为空时仍提示 `ElMessage.warning('评论内容不能为空')`，提示逻辑随输入框一起移入子组件。
+- 输入框只在 `addComment` 成功后清空；提交失败时保留草稿。子组件暴露 `clearEditor()`，父组件在请求成功后调用。
 
 ```vue
 <script setup lang="ts">
@@ -383,19 +388,26 @@ const emit = defineEmits<{
 }>()
 
 const commentContent = ref('')
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const editorRef = ref<{ focus: () => void } | null>(null)
 
-defineExpose({
-  focusEditor() {
-    textareaRef.value?.focus()
-  },
-})
+async function focusEditor() {
+  await nextTick()
+  editorRef.value?.focus()
+}
+
+function clearEditor() {
+  commentContent.value = ''
+}
+
+defineExpose({ focusEditor, clearEditor })
 
 function onSubmit() {
   const content = commentContent.value.trim()
-  if (!content) return
+  if (!content) {
+    ElMessage.warning('评论内容不能为空')
+    return
+  }
   emit('submit', content)
-  commentContent.value = ''
 }
 </script>
 
@@ -487,7 +499,7 @@ function onSubmit() {
 </style>
 ```
 
-注意：`el-input` 的 `ref` 指向组件实例而非原生 textarea，`focusEditor` 改为通过 `textareaRef.value?.focus()` 调用。若 Element Plus 的 `el-input` 实例不含 `focus`，改回 `document.querySelector<HTMLTextAreaElement>('.comment-editor textarea')?.focus()`。
+注意：`el-input` 的 `ref` 指向组件实例而非原生 textarea，`focusEditor` 通过 `editorRef.value?.focus()` 调用；Element Plus 的 `el-input` 实例已提供 `focus()`。`clearEditor()` 由父组件在提交成功后调用。
 
 - [ ] **Step 2: 改写 ArticleDetail 的评论逻辑**
 
@@ -516,6 +528,7 @@ async function onSubmitComment(content: string) {
       replyToId: replyTo.value?.id,
       content,
     })
+    commentsRef.value?.clearEditor()
     cancelReply()
     await loadComments()
   } catch {
@@ -2227,7 +2240,7 @@ git commit -m "refactor(frontend): 抽出顶部用户菜单"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-09-21-blog-platform-frontend-structure.md`
 
-- [ ] **Step 1: 运行完整前端验证**
+- [x] **Step 1: 运行完整前端验证**
 
 Run:
 
@@ -2242,7 +2255,7 @@ npm run build
 
 Expected: 全部 PASS。
 
-- [ ] **Step 2: 确认四个胖组件已瘦身**
+- [x] **Step 2: 确认四个胖组件已瘦身**
 
 Run:
 
@@ -2252,7 +2265,7 @@ rg -c "" frontend/src/views/ArticleDetail.vue frontend/src/views/ArticleEdit.vue
 
 Expected: 每个文件行数明显低于拆分前，`ArticleDetail.vue` 与 `ArticleEdit.vue` 约为原行数一半。
 
-- [ ] **Step 3: 手动回归四个页面**
+- [x] **Step 3: 手动回归四个页面**
 
 启动开发服务：
 
@@ -2270,7 +2283,7 @@ npm run dev
 
 Expected: 行为与拆分前一致，移动端顶栏、编辑器面板和详情页底部操作条均不塌陷。
 
-- [ ] **Step 4: 勾选验收项并提交**
+- [x] **Step 4: 勾选验收项并提交**
 
 ```powershell
 git add -- docs/superpowers/plans/2026-09-21-blog-platform-frontend-structure.md
@@ -2281,11 +2294,84 @@ git commit -m "docs: 完成前端结构收敛验证"
 
 ## 验收清单
 
-- [ ] `ArticleDetail.vue` 拆出 `ArticleDetailHeader`、`ArticleRail`、`ArticleComments`。
-- [ ] `ArticleEdit.vue` 拆出 `EditorDocumentBar`、`EditorMetadataFields`、`EditorPanels`。
-- [ ] `Profile.vue` 拆出 `ProfileArticleLedger`、`ProfileFavoriteLedger`。
-- [ ] `AppHeader.vue` 拆出 `HeaderNav`、`HeaderNotifications`、`HeaderUserMenu`。
-- [ ] 所有子组件通过 props 和 emits 通信，通知下拉独立管理状态。
-- [ ] 页面视觉、交互流程和接口调用保持不变。
-- [ ] 类型检查、两个 Linter、构建和既有测试全部通过。
-- [ ] 四个页面手动回归全部通过。
+- [x] `ArticleDetail.vue` 拆出 `ArticleDetailHeader`、`ArticleRail`、`ArticleComments`。
+- [x] `ArticleEdit.vue` 拆出 `EditorDocumentBar`、`EditorMetadataFields`、`EditorPanels`。
+- [x] `Profile.vue` 拆出 `ProfileArticleLedger`、`ProfileFavoriteLedger`。
+- [x] `AppHeader.vue` 拆出 `HeaderNav`、`HeaderNotifications`、`HeaderUserMenu`。
+- [x] 所有子组件通过 props 和 emits 通信，通知下拉独立管理状态。
+- [x] 页面视觉、交互流程和接口调用保持不变。
+- [x] 类型检查、两个 Linter、构建和既有测试全部通过。
+- [x] 四个页面手动回归全部通过。
+
+---
+
+## 验证记录
+
+### 文件瘦身结果
+
+| 文件 | 拆分前 | 拆分后 |
+|---|---|---|
+| `ArticleDetail.vue` | 449 | 283 |
+| `ArticleEdit.vue` | 469 | 348 |
+| `Profile.vue` | 340 | 219 |
+| `AppHeader.vue` | 319 | 106 |
+
+`ArticleEdit.vue` 降幅最小，因为 Markdown 正文输入区与表单校验上下文按设计保留在父组件。
+
+### 前端验证
+
+```powershell
+npm test        # 7 passed
+npm run type-check
+npx eslint .
+npx oxlint .
+npm run build
+```
+
+全部通过。
+
+### 后端验证
+
+`mvnw test` 需在 JDK 17 环境执行（本机默认 JDK 25，Lombok 不兼容）。使用
+`maven:3.9-eclipse-temurin-17` 容器执行完整测试：29 个测试全部通过。
+
+### 手动回归
+
+| 页面 | 验证项 | 结果 |
+|---|---|---|
+| 顶栏（未登录） | 品牌、导航、搜索框、登录/注册 | 通过 |
+| 顶栏（登录） | 通知徽标、写文章、账户菜单、头像首字母 | 通过 |
+| 通知下拉 | 宽度 320px、未读点、全部已读、清空、条目文案 | 通过 |
+| 用户菜单 | 个人中心、退出登录 | 通过 |
+| 文章详情 | 头部、右栏、评论区、移动端底部操作条 | 通过 |
+| 评论 | 分页加载、空内容告警、作者与删除按钮权限 | 通过 |
+| 编辑器 | 文档栏、元信息写回、工具栏、大纲、预览 | 通过 |
+| 编辑器保存 | 存草稿、跳转个人中心、列表呈现 | 通过 |
+| 个人中心 | 我的文章、我的收藏两个标签页 | 通过 |
+| 响应式 | 移动端顶栏折叠、编辑器四面板切换 | 通过 |
+
+### 过程中修复的问题
+
+1. **评论空内容告警丢失**（Task 3）：提取 `ArticleComments` 时漏搬告警，已恢复并验证。
+2. **提交失败丢草稿**（Task 3）：输入框改为 `addComment` 成功后才清空，失败保留草稿。
+3. **`.notify-popper` 归属错误**（Task 10）：该样式移入 `HeaderNotifications`，组件自持完整表现契约。
+4. **后端循环依赖**（批次 A 遗留）：`ArticleServiceImpl` 与 `ArticleSearchSyncServiceImpl`、`HotArticleServiceImpl` 之间存在 Bean 循环依赖，导致后端无法启动。改为直接依赖 `ArticleMapper`，并移除 `HotArticleServiceImpl` 中未使用的 `UserService`。
+
+### 后端循环依赖的回归防护
+
+原缺陷之所以绕过整个测试套件，是因为纯 Mockito 单测不会装配 Spring 上下文。新增
+`BeanDependencyCycleTest`：扫描组件、反射重建构造依赖图并检测环，无需 MySQL/Redis/ES
+即可运行。已通过「临时还原循环依赖 → 测试失败并报出
+`ArticleServiceImpl -> ArticleSearchSyncServiceImpl -> ArticleServiceImpl` → 恢复」的方式
+验证其有效性。后端测试总数由 29 增至 30。
+
+### 遗留事项
+
+- `migration-2026-09-18.sql` 在已有数据的库上会失败：`event_key` 为
+  `NOT NULL DEFAULT ''` 且带唯一索引，历史行会因空值重复而冲突。本地已用
+  「加列 → 回填 `LEGACY:<id>` → 加索引」的方式完成升级，脚本本身建议后续修正。
+- `ProfileArticleLedger` 与 `ProfileFavoriteLedger` 的分页样式与 `PageState`
+  仍有重复，可留待后续批次收敛。
+- 前端尚无组件级测试；分页与提交失败路径依赖手动回归覆盖。
+- `HotArticleServiceImpl` 与 `ArticleSearchSyncServiceImpl` 的 mapper 查询路径
+  仍缺针对性单测（现有测试只覆盖了 Redis 分支）。

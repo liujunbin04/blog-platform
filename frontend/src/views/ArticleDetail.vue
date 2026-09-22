@@ -4,7 +4,6 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import 'element-plus/es/components/message/style/css'
 import 'element-plus/es/components/message-box/style/css'
-import { CollectionTag, Star } from '@element-plus/icons-vue'
 import MarkdownIt from 'markdown-it'
 
 import { deleteArticle, getArticleDetail } from '@/api/article'
@@ -12,11 +11,11 @@ import { addComment, deleteComment, getCommentPage } from '@/api/comment'
 import { favoriteArticle, getFavoriteStatus, unfavoriteArticle } from '@/api/favorite'
 import { getLikeStatus, likeArticle, unlikeArticle } from '@/api/like'
 import AppShell from '@/components/AppShell.vue'
-import CommentItem from '@/components/CommentItem.vue'
-import ContextRail from '@/components/ContextRail.vue'
+import ArticleComments from '@/components/ArticleComments.vue'
+import ArticleDetailHeader from '@/components/ArticleDetailHeader.vue'
+import ArticleRail from '@/components/ArticleRail.vue'
 import { useUserStore } from '@/stores/user'
 import type { ArticleVO, CommentVO } from '@/types/api'
-import { formatDateTime } from '@/utils/format'
 
 const md = new MarkdownIt({ breaks: true })
 
@@ -34,9 +33,9 @@ const comments = ref<CommentVO[]>([])
 const commentPage = ref(1)
 const commentPageSize = 20
 const commentTotal = ref(0)
-const commentContent = ref('')
 const submitting = ref(false)
 const replyTo = ref<CommentVO | null>(null)
+const commentsRef = ref<InstanceType<typeof ArticleComments> | null>(null)
 
 const renderedContent = computed(() => (article.value ? md.render(article.value.content) : ''))
 const isAuthor = computed(
@@ -74,14 +73,15 @@ async function loadArticle() {
   }
 }
 
-async function loadComments() {
-  const page = await getCommentPage({
+async function loadComments(page = commentPage.value) {
+  const result = await getCommentPage({
     articleId: articleId.value,
-    pageNum: commentPage.value,
+    pageNum: page,
     pageSize: commentPageSize,
   })
-  comments.value = page.list
-  commentTotal.value = Number(page.total)
+  commentPage.value = page
+  comments.value = result.list
+  commentTotal.value = Number(result.total)
 }
 
 async function loadInteractionStatus() {
@@ -149,16 +149,10 @@ function cancelReply() {
 }
 
 function focusCommentEditor() {
-  document.querySelector<HTMLTextAreaElement>('.comment-editor textarea')?.focus()
+  commentsRef.value?.focusEditor()
 }
 
-async function onSubmitComment() {
-  const content = commentContent.value.trim()
-  if (!content) {
-    ElMessage.warning('评论内容不能为空')
-    return
-  }
-
+async function onSubmitComment(content: string) {
   submitting.value = true
   try {
     await addComment({
@@ -166,7 +160,7 @@ async function onSubmitComment() {
       replyToId: replyTo.value?.id,
       content,
     })
-    commentContent.value = ''
+    commentsRef.value?.clearEditor()
     cancelReply()
     await loadComments()
   } catch {
@@ -219,108 +213,41 @@ watch(articleId, () => {
       <template v-if="article">
         <div class="detail-layout">
           <article class="article-main">
-            <header class="article-header">
-              <div class="article-kicker">
-                <span>{{ article.category || '随笔' }}</span>
-                <span>{{ readingMinutes }} MIN READ</span>
-              </div>
-              <h1 class="title">{{ article.title }}</h1>
-              <div class="meta">
-                <span>{{ article.author?.nickname || '匿名' }}</span>
-                <span>{{ formatDateTime(article.createTime) }}</span>
-                <span>浏览 {{ article.viewCount }}</span>
-                <el-tag v-if="article.status === 0" size="small" type="warning">草稿</el-tag>
-                <el-tag v-else-if="article.hidden === 1" size="small" type="warning">已隐藏</el-tag>
-                <span v-if="isAuthor" class="owner-actions">
-                  <el-button link type="primary" @click="router.push(`/publish/${article.id}`)">
-                    编辑
-                  </el-button>
-                  <el-button link type="danger" @click="onDelete">删除</el-button>
-                </span>
-              </div>
-            </header>
+            <ArticleDetailHeader
+              :article="article"
+              :is-author="isAuthor"
+              :reading-minutes="readingMinutes"
+              @edit="router.push(`/publish/${article.id}`)"
+              @delete="onDelete"
+            />
 
             <div class="markdown-body" v-html="renderedContent" />
           </article>
 
-          <ContextRail label="IN THIS ARTICLE">
-            <section class="rail-block">
-              <h3>作者</h3>
-              <strong>{{ article.author?.nickname || '匿名' }}</strong>
-              <p>{{ formatDateTime(article.createTime) }}</p>
-            </section>
-
-            <section class="rail-block">
-              <h3>标签</h3>
-              <div v-if="articleTags.length > 0" class="tag-list">
-                <span v-for="tag in articleTags" :key="tag">{{ tag }}</span>
-              </div>
-              <p v-else>暂无标签</p>
-            </section>
-
-            <section class="rail-block">
-              <h3>互动</h3>
-              <el-button :type="liked ? 'primary' : 'default'" class="rail-action" @click="onToggleLike">
-                <el-icon><Star /></el-icon>
-                点赞 {{ article.likeCount }}
-              </el-button>
-              <el-button
-                :type="favorited ? 'warning' : 'default'"
-                class="rail-action"
-                @click="onToggleFavorite"
-              >
-                <el-icon><CollectionTag /></el-icon>
-                {{ favorited ? '已收藏' : '收藏' }}
-              </el-button>
-            </section>
-
-            <section class="rail-block future-slot" aria-hidden="true">
-              <h3>扩展位</h3>
-              <p>为未来的阅读辅助能力保留结构位置，当前不展示任何功能入口。</p>
-            </section>
-          </ContextRail>
+          <ArticleRail
+            :article="article"
+            :liked="liked"
+            :favorited="favorited"
+            :article-tags="articleTags"
+            @toggle-like="onToggleLike"
+            @toggle-favorite="onToggleFavorite"
+          />
         </div>
 
-        <section class="comments-section">
-          <h2>评论（{{ commentTotal }}）</h2>
-
-          <div v-if="replyTo" class="reply-banner">
-            回复 @{{ replyTo.author?.nickname || '匿名' }}
-            <el-button link size="small" @click="cancelReply">取消</el-button>
-          </div>
-
-          <div class="comment-editor">
-            <el-input
-              v-model="commentContent"
-              type="textarea"
-              :rows="3"
-              maxlength="1000"
-              show-word-limit
-              placeholder="写下你的评论"
-            />
-            <el-button type="primary" :loading="submitting" @click="onSubmitComment">
-              发表评论
-            </el-button>
-          </div>
-
-          <el-empty v-if="comments.length === 0" description="还没有评论，来抢沙发" :image-size="80" />
-          <CommentItem
-            v-for="comment in comments"
-            :key="comment.id"
-            :comment="comment"
-            @reply="onReply"
-            @delete="onDeleteComment"
-          />
-          <el-pagination
-            v-if="commentTotal > commentPageSize"
-            v-model:current-page="commentPage"
-            :page-size="commentPageSize"
-            :total="commentTotal"
-            layout="prev, pager, next"
-            class="comment-pagination"
-            @current-change="loadComments"
-          />
-        </section>
+        <ArticleComments
+          ref="commentsRef"
+          :comments="comments"
+          :comment-total="commentTotal"
+          :comment-page="commentPage"
+          :comment-page-size="commentPageSize"
+          :submitting="submitting"
+          :reply-to="replyTo"
+          @submit="onSubmitComment"
+          @change-page="loadComments"
+          @reply="onReply"
+          @cancel-reply="cancelReply"
+          @delete-comment="onDeleteComment"
+        />
 
         <div class="mobile-actions">
           <button type="button" @click="onToggleLike">点赞 {{ article.likeCount }}</button>
@@ -347,119 +274,10 @@ watch(articleId, () => {
   padding: 46px 56px 56px;
 }
 
-.article-kicker,
-.meta {
-  color: var(--blog-muted);
-  font-family: var(--blog-font-mono);
-  font-size: 11px;
-}
-
-.article-kicker {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  color: var(--blog-red);
-}
-
-.title {
-  margin: 14px 0 16px;
-  font-family: var(--blog-font-display);
-  font-size: clamp(34px, 4vw, 54px);
-  line-height: 1.15;
-}
-
-.meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 12px;
-  padding-bottom: 22px;
-  border-bottom: 1px solid var(--blog-line);
-}
-
-.owner-actions {
-  margin-left: auto;
-}
-
 .markdown-body {
   padding-top: 26px;
   font-size: 17px;
   line-height: 1.9;
-}
-
-.rail-block + .rail-block {
-  margin-top: 26px;
-}
-
-.rail-block h3 {
-  margin: 0 0 10px;
-  font-size: 12px;
-}
-
-.rail-block p {
-  margin: 8px 0 0;
-  color: #5e7c70;
-  font-size: 11px;
-  line-height: 1.65;
-}
-
-.tag-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-}
-
-.tag-list span {
-  padding: 5px 8px;
-  background: #d4e5de;
-  font-size: 11px;
-}
-
-.rail-action {
-  width: 100%;
-  margin: 0 0 8px;
-}
-
-.future-slot {
-  padding-top: 18px;
-  border-top: 1px dashed #9eb8ac;
-}
-
-.comments-section {
-  max-width: 840px;
-  margin-top: 28px;
-  padding: 28px;
-  border: 1px solid var(--blog-line);
-  background: var(--blog-paper);
-}
-
-.comments-section h2 {
-  margin-top: 0;
-  font-family: var(--blog-font-display);
-}
-
-.reply-banner {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  background: var(--blog-blueprint);
-  font-size: 13px;
-}
-
-.comment-editor {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.comment-editor :deep(.el-textarea) {
-  width: 100%;
-}
-
-.comment-pagination {
-  justify-content: center;
-  margin-top: 20px;
 }
 
 .mobile-actions {
@@ -479,14 +297,6 @@ watch(articleId, () => {
 @media (max-width: 767px) {
   .article-main {
     padding: 26px 18px 36px;
-  }
-
-  .title {
-    font-size: 34px;
-  }
-
-  .comments-section {
-    padding: 20px 16px 90px;
   }
 
   .mobile-actions {
