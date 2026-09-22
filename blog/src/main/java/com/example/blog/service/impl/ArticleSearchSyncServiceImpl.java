@@ -3,9 +3,9 @@ package com.example.blog.service.impl;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.ArticleDocument;
 import com.example.blog.entity.User;
+import com.example.blog.mapper.ArticleMapper;
 import com.example.blog.repository.ArticleSearchRepository;
 import com.example.blog.service.ArticleSearchSyncService;
-import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.AuthorAssembler;
 import lombok.RequiredArgsConstructor;
@@ -22,7 +22,7 @@ public class ArticleSearchSyncServiceImpl implements ArticleSearchSyncService {
 
     private final ArticleSearchRepository articleSearchRepository;
     private final AuthorAssembler authorAssembler;
-    private final ArticleService articleService;
+    private final ArticleMapper articleMapper;
     private final ArticleVisibilityPolicy visibilityPolicy;
 
     @Override
@@ -61,7 +61,7 @@ public class ArticleSearchSyncServiceImpl implements ArticleSearchSyncService {
     @Override
     public void reconcileVisibility() {
         articleSearchRepository.findAll().forEach(document -> {
-            Article article = articleService.getById(document.getId());
+            Article article = articleMapper.selectById(document.getId());
             if (!visibilityPolicy.isPublic(article)) {
                 articleSearchRepository.deleteById(document.getId());
             }

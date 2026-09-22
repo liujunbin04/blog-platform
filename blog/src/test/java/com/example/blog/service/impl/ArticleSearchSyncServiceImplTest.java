@@ -2,8 +2,8 @@ package com.example.blog.service.impl;
 
 import com.example.blog.entity.Article;
 import com.example.blog.entity.User;
+import com.example.blog.mapper.ArticleMapper;
 import com.example.blog.repository.ArticleSearchRepository;
-import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.AuthorAssembler;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class ArticleSearchSyncServiceImplTest {
     private AuthorAssembler authorAssembler;
 
     @Mock
-    private ArticleService articleService;
+    private ArticleMapper articleMapper;
 
     @Mock
     private ArticleVisibilityPolicy visibilityPolicy;

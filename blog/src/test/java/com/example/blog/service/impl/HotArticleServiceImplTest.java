@@ -1,8 +1,7 @@
 package com.example.blog.service.impl;
 
 import com.example.blog.entity.Article;
-import com.example.blog.service.ArticleService;
-import com.example.blog.service.UserService;
+import com.example.blog.mapper.ArticleMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -31,10 +30,7 @@ class HotArticleServiceImplTest {
     private ZSetOperations<String, String> zSetOperations;
 
     @Mock
-    private ArticleService articleService;
-
-    @Mock
-    private UserService userService;
+    private ArticleMapper articleMapper;
 
     @InjectMocks
     private HotArticleServiceImpl service;

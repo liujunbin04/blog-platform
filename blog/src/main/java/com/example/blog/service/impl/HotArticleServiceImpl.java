@@ -1,11 +1,11 @@
 package com.example.blog.service.impl;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.User;
-import com.example.blog.service.ArticleService;
+import com.example.blog.mapper.ArticleMapper;
 import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.HotArticleService;
-import com.example.blog.service.UserService;
 import com.example.blog.vo.ArticleVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -39,8 +39,7 @@ public class HotArticleServiceImpl implements HotArticleService {
     public static final int HOT_TOP_N = 100;
 
     private final StringRedisTemplate stringRedisTemplate;
-    private final ArticleService articleService;
-    private final UserService userService;
+    private final ArticleMapper articleMapper;
     private final AuthorAssembler authorAssembler;
 
     @Override
@@ -63,12 +62,9 @@ public class HotArticleServiceImpl implements HotArticleService {
     }
 
     protected List<Article> loadTopArticles() {
-        return articleService.lambdaQuery()
-                .eq(Article::getStatus, 1)
-                .eq(Article::getHidden, 0)
-                .orderByDesc(Article::getViewCount)
+        return articleMapper.selectList(publicOrderedByViews()
                 .last("LIMIT " + HOT_TOP_N)
-                .list();
+        );
     }
 
     @Override
@@ -78,12 +74,9 @@ public class HotArticleServiceImpl implements HotArticleService {
                 .reverseRange(HOT_KEY, 0, candidateSize - 1L);
         if (ids == null || ids.isEmpty()) {
             // 兜底：定时任务还没跑过（或正在重建），直接回源数据库
-            return articleService.lambdaQuery()
-                    .eq(Article::getStatus, 1)
-                    .eq(Article::getHidden, 0)
-                    .orderByDesc(Article::getViewCount)
+            return articleMapper.selectList(publicOrderedByViews()
                     .last("LIMIT " + topN)
-                    .list().stream().map(Article::getId).toList();
+            ).stream().map(Article::getId).toList();
         }
         return ids.stream().map(Long::valueOf).toList();
     }
@@ -94,10 +87,9 @@ public class HotArticleServiceImpl implements HotArticleService {
         if (count != null && count > 0) {
             return count;
         }
-        return articleService.lambdaQuery()
+        return articleMapper.selectCount(new LambdaQueryWrapper<Article>()
                 .eq(Article::getStatus, 1)
-                .eq(Article::getHidden, 0)
-                .count();
+                .eq(Article::getHidden, 0));
     }
 
     @Override
@@ -107,7 +99,7 @@ public class HotArticleServiceImpl implements HotArticleService {
             return Collections.emptyList();
         }
         // listByIds 不保序：建 Map 索引，按 ZSet 顺序组装（见收藏列表同款处理）
-        Map<Long, Article> articleMap = articleService.listByIds(ids).stream()
+        Map<Long, Article> articleMap = articleMapper.selectByIds(ids).stream()
                 .collect(Collectors.toMap(Article::getId, Function.identity()));
         Map<Long, User> userMap = authorAssembler.loadUsers(
                 articleMap.values().stream().map(Article::getAuthorId).toList()
@@ -129,5 +121,15 @@ public class HotArticleServiceImpl implements HotArticleService {
             list.add(ArticleVO.from(article, userMap.get(article.getAuthorId())));
         }
         return list;
+    }
+
+    /**
+     * 公开文章按浏览量倒序的公共查询条件，供热门榜构建与回源复用。
+     */
+    private LambdaQueryWrapper<Article> publicOrderedByViews() {
+        return new LambdaQueryWrapper<Article>()
+                .eq(Article::getStatus, 1)
+                .eq(Article::getHidden, 0)
+                .orderByDesc(Article::getViewCount);
     }
 }
