@@ -87,9 +87,11 @@ public class HotArticleServiceImpl implements HotArticleService {
         if (count != null && count > 0) {
             return count;
         }
-        return articleMapper.selectCount(new LambdaQueryWrapper<Article>()
+        Long dbCount = articleMapper.selectCount(new LambdaQueryWrapper<Article>()
                 .eq(Article::getStatus, 1)
                 .eq(Article::getHidden, 0));
+        // COUNT 理论不会为 null，这里保持与原链式 count() 一致的兜底，避免拆箱异常
+        return dbCount == null ? 0L : dbCount;
     }
 
     @Override
