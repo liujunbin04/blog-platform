@@ -2344,6 +2344,14 @@ npm run build
 3. **`.notify-popper` 归属错误**（Task 10）：该样式移入 `HeaderNotifications`，组件自持完整表现契约。
 4. **后端循环依赖**（批次 A 遗留）：`ArticleServiceImpl` 与 `ArticleSearchSyncServiceImpl`、`HotArticleServiceImpl` 之间存在 Bean 循环依赖，导致后端无法启动。改为直接依赖 `ArticleMapper`，并移除 `HotArticleServiceImpl` 中未使用的 `UserService`。
 
+### 后端循环依赖的回归防护
+
+原缺陷之所以绕过整个测试套件，是因为纯 Mockito 单测不会装配 Spring 上下文。新增
+`BeanDependencyCycleTest`：扫描组件、反射重建构造依赖图并检测环，无需 MySQL/Redis/ES
+即可运行。已通过「临时还原循环依赖 → 测试失败并报出
+`ArticleServiceImpl -> ArticleSearchSyncServiceImpl -> ArticleServiceImpl` → 恢复」的方式
+验证其有效性。后端测试总数由 29 增至 30。
+
 ### 遗留事项
 
 - `migration-2026-09-18.sql` 在已有数据的库上会失败：`event_key` 为
@@ -2351,4 +2359,6 @@ npm run build
   「加列 → 回填 `LEGACY:<id>` → 加索引」的方式完成升级，脚本本身建议后续修正。
 - `ProfileArticleLedger` 与 `ProfileFavoriteLedger` 的分页样式与 `PageState`
   仍有重复，可留待后续批次收敛。
-- 尚无组件级测试；分页与提交失败路径依赖手动回归覆盖。
+- 前端尚无组件级测试；分页与提交失败路径依赖手动回归覆盖。
+- `HotArticleServiceImpl` 与 `ArticleSearchSyncServiceImpl` 的 mapper 查询路径
+  仍缺针对性单测（现有测试只覆盖了 Redis 分支）。
