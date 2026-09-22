@@ -47,6 +47,7 @@ declare module 'vue' {
     HeaderNav: typeof import('./src/components/HeaderNav.vue')['default']
     HeaderNotifications: typeof import('./src/components/HeaderNotifications.vue')['default']
     HeaderUserMenu: typeof import('./src/components/HeaderUserMenu.vue')['default']
+    PaginationBar: typeof import('./src/components/PaginationBar.vue')['default']
     ProfileArticleLedger: typeof import('./src/components/ProfileArticleLedger.vue')['default']
     ProfileFavoriteLedger: typeof import('./src/components/ProfileFavoriteLedger.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']

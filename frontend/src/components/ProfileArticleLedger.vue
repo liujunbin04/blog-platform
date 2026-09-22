@@ -1,11 +1,8 @@
 <script setup lang="ts">
+import PaginationBar from '@/components/PaginationBar.vue'
 import type { ArticleVO } from '@/types/api'
+import type { PageState } from '@/types/pagination'
 import { formatDateTime } from '@/utils/format'
-
-interface PageState {
-  pageNum: number
-  pageSize: number
-}
 
 defineProps<{
   list: ArticleVO[]
@@ -14,21 +11,14 @@ defineProps<{
   loading: boolean
 }>()
 
-const emit = defineEmits<{
+defineEmits<{
   'update:page': [value: PageState]
-  'page-change': [page: number]
-  'size-change': []
   create: []
   edit: [article: ArticleVO]
   delete: [article: ArticleVO]
   'toggle-hide': [article: ArticleVO]
   open: [article: ArticleVO]
 }>()
-
-function onSizeChange(size: number) {
-  emit('update:page', { pageNum: 1, pageSize: size })
-  emit('size-change')
-}
 </script>
 
 <template>
@@ -78,106 +68,8 @@ function onSizeChange(size: number) {
     </article>
   </div>
 
-  <el-pagination
-    v-if="total > 0"
-    :current-page="page.pageNum"
-    :page-size="page.pageSize"
-    :total="total"
-    :page-sizes="[10, 20, 50]"
-    layout="total, sizes, prev, pager, next"
-    class="pagination"
-    @current-change="$emit('page-change', $event)"
-    @size-change="onSizeChange"
-  />
+  <PaginationBar :page="page" :total="total" @change="$emit('update:page', $event)" />
 </template>
 
-<style scoped>
-.ledger-head,
-.ledger-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 110px 190px;
-  gap: 16px;
-  align-items: center;
-}
-
-.ledger-head {
-  padding: 0 4px 10px;
-  border-bottom: 1px solid var(--blog-line);
-  color: var(--blog-muted);
-  font-family: var(--blog-font-mono);
-  font-size: 10px;
-}
-
-.ledger-row {
-  padding: 16px 4px;
-  border-bottom: 1px solid var(--blog-line-soft);
-}
-
-.ledger-title {
-  min-width: 0;
-}
-
-.ledger-title button {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--blog-ink);
-  font-weight: 700;
-  text-align: left;
-  cursor: pointer;
-}
-
-.ledger-title button:hover {
-  color: var(--blog-red);
-}
-
-.ledger-title span,
-.ledger-data {
-  display: block;
-  margin-top: 6px;
-  color: var(--blog-muted);
-  font-family: var(--blog-font-mono);
-  font-size: 10px;
-  line-height: 1.6;
-}
-
-.ledger-actions {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-}
-
-.pagination {
-  justify-content: center;
-  margin-top: 22px;
-}
-
-@media (max-width: 767px) {
-  .ledger-head {
-    display: none;
-  }
-
-  .ledger-row {
-    grid-template-columns: 1fr auto;
-    gap: 10px;
-  }
-
-  .ledger-title {
-    grid-column: 1 / -1;
-  }
-
-  .ledger-actions {
-    justify-content: flex-start;
-  }
-
-  .pagination {
-    justify-content: flex-start;
-    overflow-x: auto;
-  }
-
-  .pagination :deep(.el-pagination__sizes),
-  .pagination :deep(.el-pagination__total) {
-    display: none;
-  }
-}
+<style scoped src="@/styles/ledger.css">
 </style>

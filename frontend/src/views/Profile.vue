@@ -13,6 +13,7 @@ import ProfileArticleLedger from '@/components/ProfileArticleLedger.vue'
 import ProfileFavoriteLedger from '@/components/ProfileFavoriteLedger.vue'
 import { useUserStore } from '@/stores/user'
 import type { ArticleVO, FavoriteVO } from '@/types/api'
+import type { PageState } from '@/types/pagination'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -58,13 +59,15 @@ function onTabChange(name: number | string) {
   }
 }
 
-function onMySizeChange() {
-  myPage.pageNum = 1
+function onMyPageChange(next: PageState) {
+  myPage.pageNum = next.pageNum
+  myPage.pageSize = next.pageSize
   loadMyArticles()
 }
 
-function onFavoriteSizeChange() {
-  favPage.pageNum = 1
+function onFavoritePageChange(next: PageState) {
+  favPage.pageNum = next.pageNum
+  favPage.pageSize = next.pageSize
   loadFavorites()
 }
 
@@ -137,19 +140,7 @@ onMounted(loadMyArticles)
             :total="myTotal"
             :page="myPage"
             :loading="myLoading"
-            @update:page="
-              (value) => {
-                myPage.pageNum = value.pageNum
-                myPage.pageSize = value.pageSize
-              }
-            "
-            @page-change="
-              (page) => {
-                myPage.pageNum = page
-                loadMyArticles()
-              }
-            "
-            @size-change="onMySizeChange"
+            @update:page="onMyPageChange"
             @create="router.push('/publish')"
             @edit="(row) => router.push(`/publish/${row.id}`)"
             @delete="onDeleteArticle"
@@ -164,19 +155,7 @@ onMounted(loadMyArticles)
             :total="favTotal"
             :page="favPage"
             :loading="favLoading"
-            @update:page="
-              (value) => {
-                favPage.pageNum = value.pageNum
-                favPage.pageSize = value.pageSize
-              }
-            "
-            @page-change="
-              (page) => {
-                favPage.pageNum = page
-                loadFavorites()
-              }
-            "
-            @size-change="onFavoriteSizeChange"
+            @update:page="onFavoritePageChange"
             @cancel="onCancelFavorite"
             @open="(row) => router.push(`/articles/${row.articleId}`)"
           />
