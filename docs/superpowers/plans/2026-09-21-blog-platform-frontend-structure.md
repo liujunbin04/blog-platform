@@ -356,7 +356,12 @@ git commit -m "refactor(frontend): 抽出文章详情右侧栏"
 
 - [ ] **Step 1: 创建 ArticleComments 组件**
 
-创建 `frontend/src/components/ArticleComments.vue`。组件内部持有 `commentContent`，提交时通过 `submit` 事件带出内容：
+创建 `frontend/src/components/ArticleComments.vue`。组件内部持有 `commentContent`，提交时通过 `submit` 事件带出内容。
+
+两个必须保留的原有行为（执行时曾遗漏，已修正）：
+
+- 内容为空时仍提示 `ElMessage.warning('评论内容不能为空')`，提示逻辑随输入框一起移入子组件。
+- 输入框只在 `addComment` 成功后清空；提交失败时保留草稿。子组件暴露 `clearEditor()`，父组件在请求成功后调用。
 
 ```vue
 <script setup lang="ts">
@@ -383,19 +388,26 @@ const emit = defineEmits<{
 }>()
 
 const commentContent = ref('')
-const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const editorRef = ref<{ focus: () => void } | null>(null)
 
-defineExpose({
-  focusEditor() {
-    textareaRef.value?.focus()
-  },
-})
+async function focusEditor() {
+  await nextTick()
+  editorRef.value?.focus()
+}
+
+function clearEditor() {
+  commentContent.value = ''
+}
+
+defineExpose({ focusEditor, clearEditor })
 
 function onSubmit() {
   const content = commentContent.value.trim()
-  if (!content) return
+  if (!content) {
+    ElMessage.warning('评论内容不能为空')
+    return
+  }
   emit('submit', content)
-  commentContent.value = ''
 }
 </script>
 
@@ -487,7 +499,7 @@ function onSubmit() {
 </style>
 ```
 
-注意：`el-input` 的 `ref` 指向组件实例而非原生 textarea，`focusEditor` 改为通过 `textareaRef.value?.focus()` 调用。若 Element Plus 的 `el-input` 实例不含 `focus`，改回 `document.querySelector<HTMLTextAreaElement>('.comment-editor textarea')?.focus()`。
+注意：`el-input` 的 `ref` 指向组件实例而非原生 textarea，`focusEditor` 通过 `editorRef.value?.focus()` 调用；Element Plus 的 `el-input` 实例已提供 `focus()`。`clearEditor()` 由父组件在提交成功后调用。
 
 - [ ] **Step 2: 改写 ArticleDetail 的评论逻辑**
 
@@ -516,6 +528,7 @@ async function onSubmitComment(content: string) {
       replyToId: replyTo.value?.id,
       content,
     })
+    commentsRef.value?.clearEditor()
     cancelReply()
     await loadComments()
   } catch {
