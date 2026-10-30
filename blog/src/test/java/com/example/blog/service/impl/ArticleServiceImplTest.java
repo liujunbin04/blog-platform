@@ -8,7 +8,6 @@ import com.example.blog.mapper.FavoriteMapper;
 import com.example.blog.mapper.LikeRecordMapper;
 import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.service.ArticleCacheService;
-import com.example.blog.service.ArticleSearchSyncService;
 import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.UserService;
 import com.example.blog.service.ViewCountService;
@@ -36,9 +35,6 @@ class ArticleServiceImplTest {
 
     @Mock
     private UserService userService;
-
-    @Mock
-    private ArticleSearchSyncService articleSearchSyncService;
 
     @Mock
     private ArticleCacheService articleCacheService;

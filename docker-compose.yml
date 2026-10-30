@@ -6,7 +6,7 @@
 #   docker compose ps           # 全部 healthy 后访问 http://localhost
 #
 # 容器之间一律用「服务名 + 容器端口」互访（mysql:3306 / redis:6379 /
-# elasticsearch:9200 / rabbitmq:5672），与宿主机映射端口无关。
+# mysql:3306 / redis:6379 / rabbitmq:5672），与宿主机映射端口无关。
 # 宿主机端口统一做了偏移，目的是避开 Windows Hyper-V 的动态保留端口段
 # （本机当前保留段：3336、5357、11838-12437、50000-50059，重启后会变）。
 
@@ -93,49 +93,6 @@ services:
     networks:
       - blog-net
 
-  elasticsearch:
-    # 官方镜像没有 IK 中文分词插件，ArticleDocument 用到了 ik_max_word / ik_smart，
-    # 不装的话后端自动建索引会失败并导致启动失败。构建配置见 docker/elasticsearch/Dockerfile
-    build:
-      context: ./docker/elasticsearch
-    image: blog-elasticsearch:8.17.4-ik
-    container_name: blog-elasticsearch
-    restart: unless-stopped
-    environment:
-      TZ: Asia/Shanghai
-      # 单节点模式，跳过生产环境的多节点引导检查
-      discovery.type: single-node
-      # 关闭安全认证：后端 application.yml 里没配 ES 用户名密码，这样零改动就能连通。
-      # 上生产请改成 true，并给后端注入 SPRING_ELASTICSEARCH_USERNAME / PASSWORD
-      xpack.security.enabled: "false"
-      xpack.security.enrollment.enabled: "false"
-      # 单节点下采集监控数据纯属浪费
-      xpack.monitoring.collection.enabled: "false"
-      # 堆大小别超过物理内存一半，也不要超过 31GB（压缩指针失效阈值）。
-      # 下限给 256m、上限 512m：本机数据量很小，让 ES 按需增长而不是一上来就占满
-      ES_JAVA_OPTS: "-Xms256m -Xmx512m"
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    ports:
-      - "127.0.0.1:${ES_PORT:-19200}:9200"
-    volumes:
-      - es_data:/usr/share/elasticsearch/data
-    healthcheck:
-      # 单节点集群没有副本分片，yellow 就是正常状态，别只认 green
-      test: ["CMD-SHELL", "curl -fsS http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
-      interval: 15s
-      timeout: 10s
-      retries: 12
-      start_period: 90s
-    logging: *default-logging
-    networks:
-      - blog-net
-
   rabbitmq:
     image: rabbitmq:3.13-management
     container_name: blog-rabbitmq
@@ -198,12 +155,6 @@ services:
       SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
 
-      # --- Elasticsearch ---
-      SPRING_ELASTICSEARCH_URIS: http://elasticsearch:9200
-      # 启动时按 ArticleDocument 注解自动建索引；
-      # 关掉的话索引不存在，搜索永远返回空
-      SPRING_ELASTICSEARCH_AUTO_INDEX_CREATION: "true"
-
       # --- JWT ---
       # HS512 要求密钥 ≥ 64 字节。未在 .env 配置时 Compose 直接拒绝启动。
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
@@ -219,8 +170,6 @@ services:
       redis:
         condition: service_healthy
       rabbitmq:
-        condition: service_healthy
-      elasticsearch:
         condition: service_healthy
     logging: *default-logging
     networks:
@@ -252,7 +201,7 @@ services:
 # =============================================================================
 
 networks:
-  # 独立的 bridge 网络：六个服务互相可见，与宿主机上其他 compose 项目隔离
+  # 独立的 bridge 网络：五个服务互相可见，与宿主机上其他 compose 项目隔离
   blog-net:
     driver: bridge
 
@@ -261,5 +210,4 @@ volumes:
   # 比绑定挂载到 Windows 目录性能好得多，也没有文件权限问题
   mysql_data:
   redis_data:
-  es_data:
   rabbitmq_data:

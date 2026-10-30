@@ -50,7 +50,10 @@ CREATE TABLE IF NOT EXISTS `article` (
   KEY `idx_author` (`author_id`),
   KEY `idx_status_create` (`status`, `create_time`),
   KEY `idx_status_hidden_view` (`status`, `hidden`, `view_count`),
-  KEY `idx_status_hidden_created` (`status`, `hidden`, `create_time`)
+  KEY `idx_status_hidden_created` (`status`, `hidden`, `create_time`),
+  -- 全文搜索：ngram 分词覆盖中文（ngram_token_size 默认 2，单字走 LIKE 兜底），
+  -- 只索引 title/content；tags 是 VARCHAR(255)，用 LIKE 比对成本可忽略
+  FULLTEXT KEY `ft_search` (`title`, `content`) WITH PARSER ngram
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci COMMENT = '文章表';
 
 -- -------------------------------------------------------------

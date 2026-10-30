@@ -40,18 +40,7 @@ spring:
           multiplier: 2
           max-interval: 10000
 
-  # Elasticsearch（全文搜索；Spring Boot 3 的配置键是 uris，
-  # Boot 2 时代的 spring.data.elasticsearch.cluster-nodes 已废弃）
-  elasticsearch:
-    uris: http://localhost:9200
-    # 启动时按 ArticleDocument 注解自动建索引（不开启的话索引不存在，搜索永远无结果）
-    auto-index-creation: true
-    # 需要认证时打开：
-    # username: elastic
-    # password: your-password
-    # 连接超时（毫秒）：
-    # connection-timeout: 3s
-    # socket-timeout: 60s
+  # Elasticsearch 已移除：全文搜索改用 MySQL FULLTEXT（ngram），见 docs/design.md
 
 # MyBatis-Plus 配置
 mybatis-plus:

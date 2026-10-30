@@ -96,7 +96,7 @@ public class ArticleController {
 
     /**
      * 全文搜索：GET /api/articles/search?keyword=xx&page=1&size=10
-     * （标题、正文 multi_match + 高亮片段，见 ArticleSearchRepositoryCustomImpl）
+     * （SQL 见 ArticleMapper.xml，关键词命中在 Java 侧转成 <em> 高亮）
      */
     @GetMapping("/search")
     public Result<PageResult<ArticleSearchVO>> search(@Valid ArticleSearchDTO dto) {

@@ -1,6 +1,7 @@
 package com.example.blog.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.example.blog.entity.Article;
 import com.example.blog.vo.ArticleVO;
 import org.apache.ibatis.annotations.Delete;
@@ -13,6 +14,22 @@ import org.apache.ibatis.annotations.Update;
  */
 @Mapper
 public interface ArticleMapper extends BaseMapper<Article> {
+
+    /**
+     * 全文搜索：标题/正文走 ngram FULLTEXT，标签走 LIKE，按相关度倒序
+     * <p>SQL 见 resources/mapper/ArticleMapper.xml。可见性（已发布 + 未隐藏）直接写在
+     * WHERE 中，结果无需再回表过滤</p>
+     *
+     * @param keyword 已转义 LIKE 通配符的关键词
+     */
+    IPage<Article> searchByFullText(IPage<Article> page, @Param("keyword") String keyword);
+
+    /**
+     * 短关键词兜底：ngram_token_size=2 时单字无法命中全文索引，退化为 LIKE 扫描
+     *
+     * @param keyword 已转义 LIKE 通配符（! 作转义符）的关键词
+     */
+    IPage<Article> searchByLike(IPage<Article> page, @Param("keyword") String keyword);
 
     /**
      * 文章详情：自定义 SQL 关联 user 表取作者昵称、头像

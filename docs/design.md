@@ -30,10 +30,15 @@
 - 热度排序：`hot_score DESC`，热度分由定时任务按权重公式刷新（见 5.3），走 `idx_status_hot` 索引
 
 ### 2.5 全文搜索
-- MySQL 8.0 FULLTEXT ngram 全文索引（中文 2-gram 分词），覆盖标题/摘要/正文
-- 关键词搜索 + 分页返回，相关度排序
+- MySQL 8.0 FULLTEXT ngram 全文索引（中文 2-gram 分词），覆盖标题 + 正文；标签用 `LIKE` 比对
+- 关键词搜索 + 分页返回，`MATCH ... AGAINST` 相关度排序
 - 接口：`GET /api/articles/search?keyword=`
-- 备选：数据量增长后可平滑迁移 Elasticsearch（表结构不变，仅替换搜索层）
+- 短关键词（长度 < 2）无法命中 ngram 索引（`ngram_token_size` 默认 2），退化到 `LIKE` 扫描兜底
+- 能力边界：**不支持按作者昵称搜索**（昵称在 `user` 表，FULLTEXT 只能建在同一张表的列上）
+- 决策记录：曾用 Elasticsearch 8 + IK 分词实现过该功能，后因运维成本（自建 IK 镜像、
+  512MB 堆、启动 90 秒、一条「启动回填 + 5 分钟增量同步 + 可见性对账」的一致性链路）
+  超过本地博客规模的收益而移除。数据量增长到 FULLTEXT 撑不住时再迁回，届时只需替换
+  `ArticleSearchQueryServiceImpl` 与 `ArticleMapper.xml` 的两个查询，VO 契约不变
 
 ### 2.6 热门文章缓存
 - Redis ZSET `hot:articles`（member=article_id，score=hot_score），定时任务每 10 分钟重建，首页热门榜直接读缓存
@@ -212,7 +217,7 @@ hot_score = view_count × 1 + like_count × 5 + comment_count × 10 + favorite_c
 ### 5.6 实现注意事项
 - 逻辑删除：实现时在 application.yml 开启 `mybatis-plus.global-config.db-config.logic-delete-field: deleted`（当前脚手架未开启）
 - 分页：注册 MyBatis-Plus `PaginationInnerInterceptor`（mybatis-plus-jsqlparser 已引入，不加则分页静默失效）
-- 全文搜索：`MATCH...AGAINST` 与普通索引并存，仅搜索接口使用；短关键词（<2 字）ngram 效果差，可补 LIKE 兜底
+- 全文搜索：`MATCH...AGAINST` 与普通索引并存，仅搜索接口使用；短关键词（<2 字）已实现 LIKE 兜底（见 2.5）
 
 ## 六、建表 SQL
 

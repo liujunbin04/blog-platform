@@ -21,7 +21,7 @@ export function getArticlePage(params: ArticleQuery) {
   return request.get<never, PageResult<ArticleVO>>('/articles', { params })
 }
 
-/** 全文搜索（ES 高亮） */
+/** 全文搜索（后端用 MySQL FULLTEXT 检索，标题/正文带 <em> 高亮） */
 export function searchArticles(params: { keyword: string; page: number; size: number }) {
   return request.get<never, PageResult<ArticleSearchVO>>('/articles/search', { params })
 }

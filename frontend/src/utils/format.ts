@@ -5,7 +5,7 @@ export function formatDateTime(iso?: string | null): string {
 }
 
 /**
- * 搜索结果的标题/摘要含 ES 高亮 <em> 标签。
+ * 搜索结果的标题/摘要含后端生成的 <em> 高亮标签。
  * 先整体转义 HTML 再还原 <em>，保证除高亮外不会渲染任何原始 HTML（防注入）
  */
 export function highlightHtml(text?: string | null): string {

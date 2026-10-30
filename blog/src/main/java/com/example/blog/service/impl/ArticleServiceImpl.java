@@ -17,7 +17,6 @@ import com.example.blog.mapper.NotificationMapper;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
-import com.example.blog.service.ArticleSearchSyncService;
 import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.HotArticleService;
 import com.example.blog.service.UserService;
@@ -50,8 +49,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public static final int STATUS_PUBLISHED = 1;
 
     private final UserService userService;
-
-    private final ArticleSearchSyncService articleSearchSyncService;
 
     /** 文章内容缓存（独立 Bean，避免类内自调用导致 @Cacheable 失效） */
     private final ArticleCacheService articleCacheService;
@@ -86,10 +83,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         save(article);
         // 回读：create_time 由数据库默认值生成，需重新查询才能返回
         Article saved = getById(article.getId());
-        // 已发布文章立即同步 ES（原来只靠 5 分钟定时任务，发布后短时间内搜索不到）
-        if (visibilityPolicy.isPublic(saved)) {
-            articleSearchSyncService.sync(saved);
-        }
         return ArticleVO.from(saved, currentUser());
     }
 
@@ -108,12 +101,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         updateById(article);
         Article saved = getById(id);
-        // ES 与可见性保持一致：公开中 → 建索引；草稿/已隐藏 → 删索引（搜索不可见）
-        if (visibilityPolicy.isPublic(saved)) {
-            articleSearchSyncService.sync(saved);
-        } else {
-            articleSearchSyncService.remove(id);
-        }
         return ArticleVO.from(saved, currentUser());
     }
 
@@ -130,9 +117,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         favoriteMapper.deleteByArticleId(id);
         notificationMapper.deleteByArticleId(id);
         baseMapper.hardDeleteById(id);
-        // 同步删除 ES 文档（ES 操作在 MySQL 事务之外、失败不会回滚，
-        // 失败仅记日志：下次启动的全量回填会以数据库为准纠正索引）
-        articleSearchSyncService.remove(id);
         // 清掉 Redis 里的浏览量计数，否则回写任务会不断尝试更新一个已不存在的行
         viewCountService.remove(id);
     }
@@ -141,16 +125,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @CacheEvict(value = "article", key = "#id")
     public void hideArticle(Long id) {
         transitionHidden(id, 0, 1, "文章不是公开状态，无法隐藏");
-        // 从 ES 移除：隐藏的文章不应再被搜索到
-        articleSearchSyncService.remove(id);
     }
 
     @Override
     @CacheEvict(value = "article", key = "#id")
     public void unhideArticle(Long id) {
         transitionHidden(id, 1, 0, "文章不是隐藏状态，无法公开");
-        // 重新公开 → 重建 ES 索引
-        articleSearchSyncService.sync(getById(id));
     }
 
     /**
