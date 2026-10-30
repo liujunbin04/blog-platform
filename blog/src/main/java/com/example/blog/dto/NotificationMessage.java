@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class NotificationMessage {
+public class NotificationMessage implements EventMessage {
 
     /** 消息类型：COMMENT / LIKE */
     private String type;

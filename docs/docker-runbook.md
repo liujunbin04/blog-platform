@@ -1,11 +1,14 @@
 # 构建与运行手册
 
-配套文件：`docker-compose.yml`、`blog/Dockerfile`、`frontend/Dockerfile`、
-`docker/elasticsearch/Dockerfile`（IK 分词插件）
+配套文件：`docker-compose.yml`、`blog/Dockerfile`、`frontend/Dockerfile`
 设计说明见 `docs/superpowers/plans/2026-08-29-dockerization.md`
 
 > 本手册记录的配置已于 2026-08-29 在本机**完整跑通**：六个服务全部 healthy，
-> 前端、后端直连、Nginx 反代、SPA 深链接、ES 中文分词搜索均已验证。
+> 前端、后端直连、Nginx 反代、SPA 深链接、中文全文搜索均已验证。
+>
+> **2026-10-30 变更**：Elasticsearch 已移除，全文搜索改用 MySQL FULLTEXT ngram
+> （见 `docs/design.md` 2.5 的决策记录）。现在只有 **五个**服务；
+> 旧数据卷里的 `es_data` 不会被自动清理，用 `docker compose down -v` 可一并删掉。
 
 ---
 
@@ -30,7 +33,6 @@
 | backend | 18080 | 8080 | http://localhost:18080 |
 | mysql | 33306 | 3306 | `localhost:33306` |
 | redis | 16379 | 6379 | `localhost:16379` |
-| elasticsearch | 19200 | 9200 | http://localhost:19200 |
 | rabbitmq (AMQP) | 56720 | 5672 | `localhost:56720` |
 | rabbitmq (管理台) | 15672 | 15672 | http://localhost:15672 |
 
@@ -105,27 +107,29 @@ docker compose ps          # 六个都应为 healthy
 | 后端直连 | `curl -s http://localhost:18080/api/articles` | JSON 文章列表 |
 | Nginx 反代 | `curl -s http://localhost/api/articles` | 同上 |
 | SPA 深链接 | `curl -s -o /dev/null -w "%{http_code}" http://localhost/articles/23` | 200 |
-| ES 回填 | `docker compose logs backend \| grep "ES 全量回填完成"` | `共 N 篇` |
-| ES 文档数 | `curl -s http://localhost:19200/article/_count` | count > 0 |
-| IK 分词 | 见下 | 中文被正确切分 |
+| 全文检索 | `curl -s "http://localhost/api/articles/search?keyword=全文"` | `total` > 0 |
+| 热榜 | `curl -s http://localhost/api/articles/hot?topN=5` | 按热度倒序 |
+| 死信队列 | `curl -s -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:18080/api/admin/dlq` | 三个 DLQ，条数均为 0 |
 
-IK 分词自检：
+FULLTEXT 索引自检（确认 ngram 解析器已生效）：
 
 ```bash
-curl -s http://localhost:19200/article/_analyze -H "Content-Type: application/json" \
-  -d '{"analyzer":"ik_smart","text":"SpringBoot博客平台全文搜索"}'
+docker compose exec -T mysql mysql -uroot -p123456 blog -e "SHOW CREATE TABLE article\G" \
+  | grep ft_search
+# 期望：FULLTEXT KEY `ft_search` (`title`,`content`) /*!50100 WITH PARSER `ngram` */
 ```
 
-应切出 `springboot` / `博客` / `平台` / `全文` / `搜索`。
+注意 `ngram_token_size` 默认 2，搜索**单个汉字**命不中全文索引，
+接口会退化成 `LIKE` 扫描（见 `ArticleSearchQueryServiceImpl`），这是预期行为。
 
 ### 写链路自检
 
 读接口之外，建议定期验证写入与异步消息链路。实测脚本走的是 Nginx 反代：
-注册两个账号 → 登录拿 JWT → 发文章 → 校验 ES 同步 → 评论 → 校验 RabbitMQ 通知 →
-清理。八项全通过才算健康。
+注册两个账号 → 登录拿 JWT → 发文章 → 校验可搜索 → 评论/点赞 → 校验 RabbitMQ 通知
+与热度加分 → 清理。全通过才算健康。
 
-注意**清理要清两处**：删 MySQL 行不会自动删 ES 文档，两边都要处理，
-否则搜索会搜到已删除的文章。
+热度链路自检：点赞后 `docker compose exec -T redis redis-cli ZSCORE hot:articles <id>`
+应增加 `likeWeight`（默认 5）；`redis-cli --scan --pattern 'hot:dedup:*'` 能看到去重键。
 
 ---
 
@@ -133,7 +137,7 @@ curl -s http://localhost:19200/article/_analyze -H "Content-Type: application/js
 
 ### 日志轮转
 
-compose 顶部定义了 `x-logging` 锚点，六个服务用 `logging: *default-logging` 引用，
+compose 顶部定义了 `x-logging` 锚点，五个服务用 `logging: *default-logging` 引用，
 每个容器最多保留 3 个 10MB 的日志文件，超出滚动覆盖。
 
 Docker 默认的 `json-file` 驱动**不限制大小**，服务长期开着日志会无限增长。
@@ -150,14 +154,13 @@ docker inspect blog-backend --format '{{index .HostConfig.LogConfig.Config "max-
 
 | 服务 | 堆参数 | 实测占用 |
 | --- | --- | --- |
-| elasticsearch | `-Xms256m -Xmx512m` | 约 840MB |
 | backend | `-Xms256m -Xmx512m` | 约 710MB |
 | mysql | 默认 | 约 440MB |
 | rabbitmq | 默认 | 约 160MB |
 | frontend | — | 约 27MB |
 | redis | `maxmemory 256mb` | 约 9MB |
 
-整套约 2.1GB（调整前约 2.7GB）。若后端出现 `OutOfMemoryError`，
+整套约 1.3GB（移除 ES 前约 2.1GB）。若后端出现 `OutOfMemoryError`，
 把 compose 里 `JAVA_OPTS` 上限调回 `768m` 即可。
 
 > 别用 `docker exec ... java -XX:+PrintFlagsFinal -version` 查堆大小——
@@ -167,8 +170,7 @@ docker inspect blog-backend --format '{{index .HostConfig.LogConfig.Config "max-
 ### 数据持久化
 
 `docker compose down` 只删容器和网络，**数据卷保留**。实测停机前后
-user 5 / article 7 / comment 13 / notification 3、ES 4 篇文档、RabbitMQ 2 个队列、
-Redis 1 个键，全部原样恢复。
+user / article / comment / notification 行数、RabbitMQ 队列、Redis 键，全部原样恢复。
 
 只有 `docker compose down -v`（带 `-v`）才会连卷一起删——那会回到干净环境，
 下次启动重新执行建表脚本。
@@ -204,12 +206,6 @@ docker compose up -d mysql
 
 ## 排障
 
-**IK 分词器缺失：后端起不来**
-`ArticleDocument` 用了 `ik_max_word` / `ik_smart`，官方 ES 镜像不带插件，报错：
-`mapper_parsing_exception: analyzer [ik_smart] has not been configured in mappings`。
-解决：本仓库的 `docker/elasticsearch/Dockerfile` 会在构建时装 `analysis-ik`，
-compose 里 ES 走的是 `build` 而非官方镜像直引。插件版本必须与 ES 版本完全一致。
-
 **前端一直 `health: starting`**
 容器 `/etc/hosts` 里 `localhost` 同时映射到 `::1`，而 nginx 只监听 IPv4 的
 `0.0.0.0:80`，走 `::1` 会 Connection refused。健康检查已改为显式 `127.0.0.1`。
@@ -234,12 +230,22 @@ docker tag  docker.m.daocloud.io/library/mysql:8.4 mysql:8.4
 ```bash
 docker compose logs backend | tail -60
 ```
-ES 索引创建失败会导致整个 Spring 容器初始化中止（repository bean 建不出来），
-这类错误在日志里表现为 `UnsatisfiedDependencyException` → `articleSearchRepository`。
-
-**ES 起不来**
-Linux 宿主机需 `sudo sysctl -w vm.max_map_count=262144`。Docker Desktop（WSL2）一般已满足。
+多数是依赖服务没就绪。compose 已经用 `depends_on: condition: service_healthy` 等齐，
+如果仍失败，先看 `docker compose ps` 里谁不是 healthy。
 
 **搜索没结果**
-看 `ArticleSyncTask` 是否跑过。失败时日志会有 `ES 全量回填失败，搜索功能暂不可用`，
-其他功能不受影响，重启后端会重试。
+先确认索引存在（见上文 FULLTEXT 索引自检）。`init.sql` 只在数据卷为空时执行，
+**改了 `init.sql` 必须 `docker compose down -v` 重建**，否则旧库没有 `ft_search`，
+全文检索会一直返回空。
+注意单个汉字搜不到是预期行为（`ngram_token_size=2`），走的是 LIKE 兜底。
+
+**热度榜为空或分数不对**
+- 空：看日志有没有 `热门文章重建完成`。启动时会 seed 一次，之后每 30 分钟校正
+- 分数不对：增量靠 MQ 事件，`rabbitmqctl list_queues name messages` 看 `hot.score.queue`
+  是否有积压；死信积压用 `GET /api/admin/dlq` 查，必要时 `POST /api/admin/dlq/replay` 重放
+- 注意增量与重建的差别：重建以数据库为准，会**覆盖**增量累加的结果。
+  刚点完赞看到分数被"降回去"是正常的，说明重建拿到了权威数据
+
+**封禁 DLQ 端点 403**
+`app.admin.usernames` 为空时任何人都访问不了。在 `.env` 设 `ADMIN_USERNAMES=你的登录名`
+（逗号分隔），再 `docker compose up -d backend` 让环境变量生效。

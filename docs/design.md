@@ -1,6 +1,7 @@
 # 博客平台 — 需求文档 & 数据库设计
 
 > 所属项目：`blog-platform/blog`（Spring Boot 3.5.16 / MyBatis-Plus 3.5.9 / MySQL 8.0 / Redis / RabbitMQ / JWT）
+> 中间件：MySQL（业务数据 + FULLTEXT 全文索引）、Redis（缓存 / 计数 / 热榜）、RabbitMQ（站内通知 + 热度加分事件）
 > 文档日期：2026-08-22
 
 ## 一、项目概述
@@ -41,15 +42,17 @@
   `ArticleSearchQueryServiceImpl` 与 `ArticleMapper.xml` 的两个查询，VO 契约不变
 
 ### 2.6 热门文章缓存
-- Redis ZSET `hot:articles`（member=article_id，score=hot_score），定时任务每 10 分钟重建，首页热门榜直接读缓存
+- Redis ZSET `hot:articles`（member=article_id，score=hot_score），首页热门榜直接读缓存
+- **两条写路径**：日常分数由 MQ 事件增量维护（点赞/评论/收藏），浏览量直接 ZINCRBY 不经过 MQ；
+  每 30 分钟从数据库按公式全量重算并原子替换，用来校正增量漂移
 - 文章详情缓存（Spring Cache，key=`article::{id}`，TTL 10 分钟，只缓存公开文章）
 - 防穿透（不缓存 null）、防击穿（缓存未命中时用 Redisson 分布式锁串行化回源）；雪崩由 key 按文章 id 天然分散来规避，未做额外的 TTL 随机化
 
 ### 2.7 评论/点赞异步通知
-- 评论、点赞事件投递 RabbitMQ（Exchange `blog.event` → Queue `blog.notify`）
+- 评论、点赞事件投递 RabbitMQ（Exchange `blog.exchange`，routing key `comment.add` / `like.add`）
 - 通知服务消费事件，写入 `notification` 表（站内信），用户分页查询、标记已读
-- 消息体 JSON：`{"type":1,"articleId":100,"commentId":200,"senderId":1,"receiverId":2}`
-- 消费幂等：`notification` 表联合唯一索引去重，重复投递直接忽略
+- 消息体见 `NotificationMessage`（JSON，`__TypeId__` 头指向具体类）
+- 消费幂等：`notification` 表 `uk_event_key` 唯一索引去重，重复投递直接忽略
 
 ## 三、ER 关系
 
@@ -190,13 +193,17 @@ category ──1:N── article（预留）
 - 浏览量：Redis `article:view:{id}` INCR，定时任务批量刷回 `view_count`
 - 点赞/评论/收藏计数：先维护 Redis 计数，定时刷回 DB；`*_count` 字段最终一致，允许短时间偏差
 
-### 5.3 热度分公式（定时任务每 10 分钟刷新）
+### 5.3 热度分公式
 
 ```
 hot_score = view_count × 1 + like_count × 5 + comment_count × 10 + favorite_count × 8
 ```
 
-只统计近 30 天文章（防止老文章长期霸榜），权重可配置化。
+- 权重与窗口是配置项（`app.hot.*`，见 `HotScoreProperties`）。这几个数字没有数据支撑，调参不该改代码
+- 只统计近 30 天文章。窗口同时约束重建范围和榜单可见范围，所以「窗口外的老文章被点一次赞」不会挂上榜单
+- **只有加分事件，没有减分事件**：取消点赞/收藏、删除评论造成的分数偏高，由每 30 分钟一次的全量重建校正。
+  这是有意的取舍——减分事件会让消息量翻倍，而影响最多持续一个重建周期
+- 增量加分靠 `SETNX hot:dedup:{eventKey}`（TTL 2 小时）挡重复投递：ZINCRBY 不幂等，重试会重复加分
 
 ### 5.4 Redis Key 约定
 
@@ -210,14 +217,28 @@ hot_score = view_count × 1 + like_count × 5 + comment_count × 10 + favorite_c
 | hot:dedup:{eventKey} | String | 热度加分事件去重，TTL 2h |
 
 ### 5.5 MQ 约定
-- Exchange `blog.event`（direct）→ Queue `blog.notify`，routing key：`notify.comment` / `notify.like`
-- 消费失败重试 3 次后进入死信队列 `blog.notify.dlq`，人工兜底
+- Exchange `blog.exchange`（topic），三组队列：
+
+| routing key | 队列 | 消费者 | 死信队列 |
+|---|---|---|---|
+| `comment.add` | `comment.notify.queue` | `NotificationConsumer` | `comment.notify.dlq` |
+| `like.add` | `like.notify.queue` | `NotificationConsumer` | `like.notify.dlq` |
+| `hot.score` | `hot.score.queue` | `HotScoreConsumer` | `hot.score.dlq` |
+
+- 消费失败重试 3 次后进入对应死信队列，`default-requeue-rejected: false` 杜绝毒消息无限 requeue
+- 死信查看与重放：`GET /api/admin/dlq`、`POST /api/admin/dlq/replay?queue=&count=`，
+  权限按 `app.admin.usernames` 白名单校验（项目没有角色体系，不为两个端点引入一套权限模型）
+- 投递确认：`publisher-confirm-type: correlated` + `publisher-returns`，回调只记 error 日志。
+  **不做**本地重试——没有持久化重试队列的重试在进程挂掉时一样会丢，只会制造可靠性的假象
+- 所有消息实现 `EventMessage` 接口，共同契约只有「必须带幂等键 `eventKey`」
 - 幂等由 notification 表 `uk_dedup` 唯一索引保证
 
 ### 5.6 实现注意事项
 - 逻辑删除：实现时在 application.yml 开启 `mybatis-plus.global-config.db-config.logic-delete-field: deleted`（当前脚手架未开启）
 - 分页：注册 MyBatis-Plus `PaginationInnerInterceptor`（mybatis-plus-jsqlparser 已引入，不加则分页静默失效）
 - 全文搜索：`MATCH...AGAINST` 与普通索引并存，仅搜索接口使用；短关键词（<2 字）已实现 LIKE 兜底（见 2.5）
+- 控制器加 `@Validated` 会启用方法级校验并抛 `ConstraintViolationException`，而全局异常处理器只覆盖
+  `HandlerMethodValidationException`，结果是参数超限返回 500。控制器**不要**加 `@Validated`（见 `AdminDlqController`）
 
 ## 六、建表 SQL
 

@@ -109,4 +109,31 @@
         ORDER BY a.create_time DESC
     </select>
 
+<!--
+        热度重建：按公式在库里算一次，取窗口内分数最高的 N 篇。
+        评论数 / 收藏数用子查询实时统计（article 表没有这两个冗余列，
+        加冗余列会把计数一致性问题扩散到评论和收藏的全部写路径）
+    -->
+    <select id="selectHotScores" resultType="com.example.blog.dto.HotScoreRow">
+        SELECT a.id AS article_id,
+               (a.view_count * #{viewWeight}
+                   + a.like_count * #{likeWeight}
+                   + COALESCE(cm.cnt, 0) * #{commentWeight}
+                   + COALESCE(fv.cnt, 0) * #{favoriteWeight}) AS score
+        FROM article a
+                 LEFT JOIN (SELECT article_id, COUNT(*) AS cnt
+                            FROM comment
+                            WHERE deleted = 0
+                            GROUP BY article_id) cm ON cm.article_id = a.id
+                 LEFT JOIN (SELECT article_id, COUNT(*) AS cnt
+                            FROM favorite
+                            GROUP BY article_id) fv ON fv.article_id = a.id
+        WHERE a.deleted = 0
+          AND a.status = 1
+          AND a.hidden = 0
+          AND a.create_time &gt;= #{since}
+        ORDER BY score DESC, a.create_time DESC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

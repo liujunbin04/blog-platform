@@ -156,8 +156,14 @@ services:
       SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
 
       # --- JWT ---
-      # HS512 要求密钥 ≥ 64 字节。未在 .env 配置时 Compose 直接拒绝启动。
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+
+      # --- 热度分权重（对应 app.hot.*，留空则用 application.yml 的默认值）---
+      # 统计窗口同时约束重建范围与榜单可见范围
+      APP_HOT_WINDOW_DAYS: ${HOT_WINDOW_DAYS:-30}
+
+      # --- 管理端白名单（/api/admin/dlq），逗号分隔的登录名 ---
+      APP_ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
     ports:
       # 宿主侧用 18080：既避开动态端口范围（1024-15000），
       # 也留出 8080 给 IDE 里直接跑的 Spring Boot，两者可同时运行

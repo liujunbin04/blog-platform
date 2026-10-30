@@ -5,12 +5,15 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.blog.common.BusinessException;
 import com.example.blog.common.PageResult;
+import com.example.blog.config.RabbitConfig;
 import com.example.blog.dto.FavoritePageDTO;
+import com.example.blog.dto.HotScoreMessage;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.Favorite;
 import com.example.blog.entity.User;
 import com.example.blog.mapper.FavoriteMapper;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.EventPublisher;
 import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.FavoriteService;
 import com.example.blog.service.UserService;
@@ -40,6 +43,8 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
     private final UserService userService;
     private final AuthorAssembler authorAssembler;
 
+    private final EventPublisher eventPublisher;
+
     @Override
     @Transactional
     public void addFavorite(Long articleId) {
@@ -65,6 +70,11 @@ public class FavoriteServiceImpl extends ServiceImpl<FavoriteMapper, Favorite> i
         }
         // 注：article 表暂无 favorite_count 字段（见 docs/design.md 热度公式），
         // 若后续加列，应在同一事务里自增，参照 LikeRecordServiceImpl.like
+        // 4. 热度加分：收藏是热度公式里意图最强的信号，走事件驱动累加。
+        //    取消收藏不发减分事件，由 30 分钟一次的全量重建校正
+        eventPublisher.publishAfterCommit(RabbitConfig.ROUTING_HOT_SCORE,
+                HotScoreMessage.of(HotScoreMessage.TYPE_FAVORITE, articleId,
+                        "HOT_FAV:" + favorite.getId()));
     }
 
     @Override

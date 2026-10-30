@@ -4,22 +4,21 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.example.blog.common.BusinessException;
 import com.example.blog.config.RabbitConfig;
+import com.example.blog.dto.HotScoreMessage;
 import com.example.blog.dto.NotificationMessage;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.LikeRecord;
 import com.example.blog.mapper.LikeRecordMapper;
 import com.example.blog.service.ArticleCacheService;
 import com.example.blog.service.ArticleService;
+import com.example.blog.service.EventPublisher;
 import com.example.blog.service.LikeRecordService;
 import com.example.blog.utils.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * 点赞服务实现
@@ -33,7 +32,7 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
 
     private final ArticleCacheService articleCacheService;
 
-    private final RabbitTemplate rabbitTemplate;
+    private final EventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -77,26 +76,11 @@ public class LikeRecordServiceImpl extends ServiceImpl<LikeRecordMapper, LikeRec
                     "你的文章收到一个新点赞",
                     "LIKE:" + record.getId()
             );
-            sendAfterCommit(RabbitConfig.ROUTING_LIKE_ADD, message);
+            eventPublisher.publishAfterCommit(RabbitConfig.ROUTING_LIKE_ADD, message);
         }
-    }
-
-    /**
-     * 事务提交后投递 MQ 消息（事务回滚则不发送）
-     */
-    private void sendAfterCommit(String routingKey, NotificationMessage message) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    rabbitTemplate.convertAndSend(RabbitConfig.BLOG_EXCHANGE, routingKey, message);
-                    log.debug("通知消息已投递: {}", message);
-                } catch (Exception e) {
-                    // 通知失败不影响主流程，记日志即可（生产可用 MQ 发送确认 + 重试）
-                    log.error("通知消息投递失败: {}", message, e);
-                }
-            }
-        });
+        // 热度加分：unlike 不发减分事件（见 HotArticleServiceImpl 的说明）
+        eventPublisher.publishAfterCommit(RabbitConfig.ROUTING_HOT_SCORE,
+                HotScoreMessage.of(HotScoreMessage.TYPE_LIKE, articleId, "LIKE:" + record.getId()));
     }
 
     @Override

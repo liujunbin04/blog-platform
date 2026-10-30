@@ -30,6 +30,12 @@ spring:
     password: guest
     # 消费者重试：失败自动重试 3 次后不再 requeue，经队列绑定的死信交换机转投 DLQ
     # （见 RabbitConfig），杜绝消费失败的消息无限 requeue 死循环
+    # 投递确认：让「消息没送到 broker」变成可观测的（回调只记 error 日志，
+    # 不做本地重试——没有持久化重试队列的重试在进程挂掉时一样会丢）
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         default-requeue-rejected: false
@@ -41,6 +47,18 @@ spring:
           max-interval: 10000
 
   # Elasticsearch 已移除：全文搜索改用 MySQL FULLTEXT（ngram），见 docs/design.md
+
+# 热度分权重与统计窗口（见 HotScoreProperties；这几个数字没有数据支撑，调参不该改代码）
+app:
+  hot:
+    view-weight: 1
+    like-weight: 5
+    comment-weight: 10
+    favorite-weight: 8
+    window-days: 30
+  admin:
+    # 允许访问 /api/admin/dlq 的登录名。留空则任何人都访问不了
+    usernames: []
 
 # MyBatis-Plus 配置
 mybatis-plus:

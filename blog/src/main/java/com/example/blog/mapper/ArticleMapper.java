@@ -2,12 +2,16 @@ package com.example.blog.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.example.blog.dto.HotScoreRow;
 import com.example.blog.entity.Article;
 import com.example.blog.vo.ArticleVO;
 import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
+
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 文章 Mapper
@@ -30,6 +34,17 @@ public interface ArticleMapper extends BaseMapper<Article> {
      * @param keyword 已转义 LIKE 通配符（! 作转义符）的关键词
      */
     IPage<Article> searchByLike(IPage<Article> page, @Param("keyword") String keyword);
+
+    /**
+     * 热度重建：按权重公式计算窗口内每篇文章的热度分，取分数最高的 limit 篇
+     * <p>SQL 见 resources/mapper/ArticleMapper.xml。评论数与收藏数用子查询实时统计</p>
+     */
+    List<HotScoreRow> selectHotScores(@Param("viewWeight") int viewWeight,
+                                      @Param("likeWeight") int likeWeight,
+                                      @Param("commentWeight") int commentWeight,
+                                      @Param("favoriteWeight") int favoriteWeight,
+                                      @Param("since") LocalDateTime since,
+                                      @Param("limit") int limit);
 
     /**
      * 文章详情：自定义 SQL 关联 user 表取作者昵称、头像

@@ -1,6 +1,7 @@
 package com.example.blog.service.impl;
 
 import com.example.blog.mapper.ArticleMapper;
+import com.example.blog.service.HotArticleService;
 import com.example.blog.service.ViewCountService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,8 @@ public class ViewCountServiceImpl implements ViewCountService {
 
     private final ArticleMapper articleMapper;
 
+    private final HotArticleService hotArticleService;
+
     @Override
     public long incrementAndGet(Long articleId, int dbBaseline) {
         String key = KEY_PREFIX + articleId;
@@ -36,6 +39,9 @@ public class ViewCountServiceImpl implements ViewCountService {
         // 若用 GET 判空再 SET，两个线程可能同时读到空、各自写一次基线，后写的会把先写的覆盖掉
         stringRedisTemplate.opsForValue().setIfAbsent(key, String.valueOf(dbBaseline));
         Long value = stringRedisTemplate.opsForValue().increment(key);
+        // 浏览量直接加热度，不经过 MQ：它是全站最高频的写入，
+        // 过 MQ 只会增加延迟和队列压力，而 Redis 自增本身就是原子的
+        hotArticleService.addScore(articleId, 1);
         return value == null ? dbBaseline : value;
     }
 

@@ -6,7 +6,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import com.example.blog.service.EventPublisher;
 
 import static org.mockito.Mockito.verify;
 
@@ -17,7 +17,7 @@ class LikeRecordServiceImplTest {
     private ArticleCacheService articleCacheService;
 
     @Mock
-    private RabbitTemplate rabbitTemplate;
+    private EventPublisher eventPublisher;
 
     @InjectMocks
     private LikeRecordServiceImpl service;

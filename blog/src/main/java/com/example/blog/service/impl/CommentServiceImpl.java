@@ -7,6 +7,7 @@ import com.example.blog.common.BusinessException;
 import com.example.blog.config.RabbitConfig;
 import com.example.blog.dto.CommentDTO;
 import com.example.blog.dto.CommentPageDTO;
+import com.example.blog.dto.HotScoreMessage;
 import com.example.blog.dto.NotificationMessage;
 import com.example.blog.entity.Article;
 import com.example.blog.entity.Comment;
@@ -16,17 +17,15 @@ import com.example.blog.service.ArticleService;
 import com.example.blog.service.ArticleVisibilityPolicy;
 import com.example.blog.service.AuthorAssembler;
 import com.example.blog.service.CommentService;
+import com.example.blog.service.EventPublisher;
 import com.example.blog.service.UserService;
 import com.example.blog.utils.SecurityUtil;
 import com.example.blog.vo.CommentVO;
 import com.example.blog.vo.CommentPageVO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -50,7 +49,7 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     private final ArticleVisibilityPolicy visibilityPolicy;
     private final UserService userService;
     private final AuthorAssembler authorAssembler;
-    private final RabbitTemplate rabbitTemplate;
+    private final EventPublisher eventPublisher;
 
     @Override
     @Transactional
@@ -96,8 +95,13 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
                     dto.getContent(),
                     "COMMENT:" + comment.getId()
             );
-            sendAfterCommit(RabbitConfig.ROUTING_COMMENT_ADD, message);
+            eventPublisher.publishAfterCommit(RabbitConfig.ROUTING_COMMENT_ADD, message);
         }
+        // 5. 热度加分事件：评论是热度公式里权重最高的一项，走事件驱动累加。
+        //    取消/删除评论不发减分事件，由 30 分钟一次的全量重建校正（见 HotArticleServiceImpl）
+        eventPublisher.publishAfterCommit(RabbitConfig.ROUTING_HOT_SCORE,
+                HotScoreMessage.of(HotScoreMessage.TYPE_COMMENT, dto.getArticleId(),
+                        "COMMENT:" + comment.getId()));
         // 回读（create_time 由数据库默认值生成，需重新查询才能返回）
         CommentVO vo = CommentVO.from(getById(comment.getId()), currentUser());
         // 单条返回也带上被回复人昵称，与评论树接口的展示保持一致
@@ -123,23 +127,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         removeById(id);
     }
 
-    /**
-     * 事务提交后投递 MQ 消息（事务回滚则不发送）
-     */
-    private void sendAfterCommit(String routingKey, NotificationMessage message) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override
-            public void afterCommit() {
-                try {
-                    rabbitTemplate.convertAndSend(RabbitConfig.BLOG_EXCHANGE, routingKey, message);
-                    log.debug("通知消息已投递: {}", message);
-                } catch (Exception e) {
-                    // 通知失败不影响主流程，记日志即可（生产可用 MQ 发送确认 + 重试）
-                    log.error("通知消息投递失败: {}", message, e);
-                }
-            }
-        });
-    }
     @Override
     @Transactional(readOnly = true)
     public CommentPageVO pageComments(CommentPageDTO dto) {

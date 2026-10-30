@@ -1,6 +1,7 @@
 package com.example.blog.service.impl;
 
 import com.example.blog.mapper.ArticleMapper;
+import com.example.blog.service.HotArticleService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -12,6 +13,7 @@ import org.springframework.data.redis.core.ValueOperations;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -26,6 +28,9 @@ class ViewCountServiceImplTest {
     @Mock
     private ArticleMapper articleMapper;
 
+    @Mock
+    private HotArticleService hotArticleService;
+
     @InjectMocks
     private ViewCountServiceImpl service;
 
@@ -38,5 +43,7 @@ class ViewCountServiceImplTest {
         long value = service.incrementAndGet(9L, 5);
 
         assertEquals(6L, value);
+        // 浏览量直接加热度，不经过 MQ
+        verify(hotArticleService).addScore(9L, 1);
     }
 }
