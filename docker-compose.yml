@@ -194,7 +194,12 @@ services:
     environment:
       TZ: Asia/Shanghai
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-80}:80"
+      # 不写 127.0.0.1 前缀：前端要能被局域网访问，绑定到 0.0.0.0。
+      # 只暴露前端——后端、数据库、Redis、RabbitMQ 仍然只绑回环，
+      # 外部流量统一经 Nginx 的 /api 反代进入，不必对外开放内部端口。
+      # 注意：本机 80 常被其他程序占用（如 Steam++ 加速器），
+      # 冲突时在 .env 里把 FRONTEND_PORT 改成 8088 之类再 up -d
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
       backend:
         condition: service_healthy

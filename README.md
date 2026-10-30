@@ -16,7 +16,9 @@ docker compose up -d --build
 docker compose ps
 ```
 
-访问 `http://localhost`。
+访问 `http://localhost:18081`（端口由 `.env` 的 `FRONTEND_PORT` 决定）。
+局域网内其他设备访问 `http://<本机局域网IP>:18081`，需先放行防火墙——
+见 [docs/docker-runbook.md](docs/docker-runbook.md#局域网访问)。
 
 ## 开发运行
 

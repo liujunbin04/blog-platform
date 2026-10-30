@@ -29,7 +29,7 @@
 
 | 服务 | 宿主端口 | 容器端口 | 地址 |
 | --- | --- | --- | --- |
-| frontend (Nginx) | 80 | 80 | http://localhost |
+| frontend (Nginx) | 18081 | 80 | http://localhost:18081 |
 | backend | 18080 | 8080 | http://localhost:18080 |
 | mysql | 33306 | 3306 | `localhost:33306` |
 | redis | 16379 | 6379 | `localhost:16379` |
@@ -103,12 +103,12 @@ docker compose ps          # 六个都应为 healthy
 
 | 检查项 | 命令 | 预期 |
 | --- | --- | --- |
-| 前端首页 | `curl -s -o /dev/null -w "%{http_code}" http://localhost/` | 200 |
+| 前端首页 | `curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/` | 200 |
 | 后端直连 | `curl -s http://localhost:18080/api/articles` | JSON 文章列表 |
-| Nginx 反代 | `curl -s http://localhost/api/articles` | 同上 |
-| SPA 深链接 | `curl -s -o /dev/null -w "%{http_code}" http://localhost/articles/23` | 200 |
-| 全文检索 | `curl -s "http://localhost/api/articles/search?keyword=全文"` | `total` > 0 |
-| 热榜 | `curl -s http://localhost/api/articles/hot?topN=5` | 按热度倒序 |
+| Nginx 反代 | `curl -s http://localhost:18081/api/articles` | 同上 |
+| SPA 深链接 | `curl -s -o /dev/null -w "%{http_code}" http://localhost:18081/articles/23` | 200 |
+| 全文检索 | `curl -s "http://localhost:18081/api/articles/search?keyword=全文"` | `total` > 0 |
+| 热榜 | `curl -s http://localhost:18081/api/articles/hot?topN=5` | 按热度倒序 |
 | 死信队列 | `curl -s -H "Authorization: Bearer <ADMIN_TOKEN>" http://localhost:18080/api/admin/dlq` | 三个 DLQ，条数均为 0 |
 
 FULLTEXT 索引自检（确认 ngram 解析器已生效）：
@@ -121,6 +121,46 @@ docker compose exec -T mysql mysql -uroot -p123456 blog -e "SHOW CREATE TABLE ar
 
 注意 `ngram_token_size` 默认 2，搜索**单个汉字**命不中全文索引，
 接口会退化成 `LIKE` 扫描（见 `ArticleSearchQueryServiceImpl`），这是预期行为。
+
+### 局域网访问
+
+**只暴露前端**。后端、MySQL、Redis、RabbitMQ 仍然只绑 `127.0.0.1`，
+外部流量统一经 Nginx 的 `/api` 反代进入——同源，所以不涉及 CORS。
+
+compose 里前端的端口映射**不带** `127.0.0.1:` 前缀，即绑定到 `0.0.0.0`：
+
+```yaml
+- "${FRONTEND_PORT:-80}:80"
+```
+
+另一半是 Windows 防火墙：它默认阻止入站，必须为宿主机端口建放行规则
+（需要**管理员** PowerShell）：
+
+```powershell
+New-NetFirewallRule -DisplayName "blog-platform (LAN 18081)" `
+  -Direction Inbound -Protocol TCP -LocalPort 18081 -Action Allow -Profile Private
+```
+
+删掉规则用 `Remove-NetFirewallRule -DisplayName "blog-platform (LAN 18081)"`。
+
+查本机局域网地址：`ipconfig | findstr IPv4`，然后其他设备访问
+`http://<局域网IP>:18081/`。
+
+#### 为什么不用 80
+
+本机 80 被 Steam++ 加速器等程序占用，而且 **Windows 允许两个进程同时绑定
+`0.0.0.0:80`**（不同于 Linux 的默认行为），`netstat` 会显示两行都处于
+LISTENING，实际流量串到先绑定的那个，表现为「Docker 说端口已映射，但访问返回
+别的服务的 404」。所以前端端口用 18081。
+
+端口选型还要遵守上文规则：必须 `> 15000`（或 `< 1024`）且不在 Hyper-V 排除段内。
+8088 这类端口虽然看着空闲，但落在 1024–15000 的动态段里，重启后可能被划走。
+
+#### 安全提醒
+
+局域网开放只适合自用/演示。当前 `.env` 里的 MySQL 密码、RabbitMQ 账号
+都是开发默认值，且 `JWT_SECRET` 若未更换会让所有令牌可被伪造——不要把这套配置
+直接放到能出公网的环境。
 
 ### 写链路自检
 
