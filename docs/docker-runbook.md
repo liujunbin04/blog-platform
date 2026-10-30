@@ -125,7 +125,10 @@ docker compose exec -T mysql mysql -uroot -p123456 blog -e "SHOW CREATE TABLE ar
 ### 局域网访问
 
 **只暴露前端**。后端、MySQL、Redis、RabbitMQ 仍然只绑 `127.0.0.1`，
-外部流量统一经 Nginx 的 `/api` 反代进入——同源，所以不涉及 CORS。
+外部流量统一经 Nginx 的 `/api` 反代进入。
+
+> 注意：路径上是同源的，**但浏览器仍然会带 Origin**（端口不是 80，属于非默认端口），
+> 所以后端 CORS 白名单必须放行局域网来源，见下文「CORS 必须放行局域网来源」。
 
 compose 里前端的端口映射**不带** `127.0.0.1:` 前缀，即绑定到 `0.0.0.0`：
 
@@ -155,6 +158,32 @@ LISTENING，实际流量串到先绑定的那个，表现为「Docker 说端口�
 
 端口选型还要遵守上文规则：必须 `> 15000`（或 `< 1024`）且不在 Hyper-V 排除段内。
 8088 这类端口虽然看着空闲，但落在 1024–15000 的动态段里，重启后可能被划走。
+
+#### CORS 必须放行局域网来源
+
+这是最容易踩的坑：**同源部署下浏览器本来不发 Origin，一旦换成局域网 IP 或换了端口，
+浏览器就会带上 Origin，而它不在后端白名单里会直接被判 403「Invalid CORS request」**。
+被拦的不只是预检，带 Origin 的普通写请求同样会被拒，前端只显示「网络异常」。
+
+内置白名单（`CorsConfig.DEFAULT_ALLOWED_ORIGINS`）只有本机地址：
+`http://localhost:5173`、`http://localhost:18081`、`http://127.0.0.1:18081`。
+
+局域网访问需要在 `.env` 追加，端口必须和 `FRONTEND_PORT` 一致：
+
+```bash
+CORS_EXTRA_ORIGINS=http://192.168.1.9:18081
+```
+
+多个来源用逗号分隔，写完整 `协议://IP:端口`，不要带结尾斜杠。
+改完 `docker compose up -d backend` 生效（环境变量，不需要 `--build`）。
+
+验证：
+
+```bash
+curl -s -o /dev/null -w "%{http_code}
+" -X POST http://192.168.1.9:18081/api/auth/register   -H "Origin: http://192.168.1.9:18081" -H "Content-Type: application/json"   -d '{"username":"probe","password":"Passw0rd1"}'
+# 期望 200；把 Origin 换成任意其他域名应返回 403 Invalid CORS request
+```
 
 #### 安全提醒
 

@@ -164,6 +164,10 @@ services:
 
       # --- 管理端白名单（/api/admin/dlq），逗号分隔的登录名 ---
       APP_ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+
+      # --- CORS 额外来源（局域网访问时必填，否则浏览器带 Origin 的写请求会被判 403）---
+      # 内置白名单已含 localhost:18081 / 127.0.0.1:18081，局域网地址需在这里追加
+      CORS_EXTRA_ORIGINS: ${CORS_EXTRA_ORIGINS:-}
     ports:
       # 宿主侧用 18080：既避开动态端口范围（1024-15000），
       # 也留出 8080 给 IDE 里直接跑的 Spring Boot，两者可同时运行

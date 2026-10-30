@@ -59,6 +59,10 @@ app:
   admin:
     # 允许访问 /api/admin/dlq 的登录名。留空则任何人都访问不了
     usernames: []
+  cors:
+    # 额外放行的来源（局域网地址等），逗号分隔。
+    # 内置白名单见 CorsConfig.DEFAULT_ALLOWED_ORIGINS（本地开发 + 前端默认端口）
+    allowed-origins: ${CORS_EXTRA_ORIGINS:}
 
 # MyBatis-Plus 配置
 mybatis-plus:
