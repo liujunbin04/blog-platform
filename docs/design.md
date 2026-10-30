@@ -237,8 +237,13 @@ hot_score = view_count × 1 + like_count × 5 + comment_count × 10 + favorite_c
 - 逻辑删除：实现时在 application.yml 开启 `mybatis-plus.global-config.db-config.logic-delete-field: deleted`（当前脚手架未开启）
 - 分页：注册 MyBatis-Plus `PaginationInnerInterceptor`（mybatis-plus-jsqlparser 已引入，不加则分页静默失效）
 - 全文搜索：`MATCH...AGAINST` 与普通索引并存，仅搜索接口使用；短关键词（<2 字）已实现 LIKE 兜底（见 2.5）
-- 控制器加 `@Validated` 会启用方法级校验并抛 `ConstraintViolationException`，而全局异常处理器只覆盖
-  `HandlerMethodValidationException`，结果是参数超限返回 500。控制器**不要**加 `@Validated`（见 `AdminDlqController`）
+- 控制器**不要**加 `@Validated`：Spring 6.1+ 已对方法参数做内建校验并抛
+  `HandlerMethodValidationException`（全局已处理）；加 `@Validated` 会改抛未被处理的
+  `ConstraintViolationException`，导致参数超限返回 500。两者只留一个，见 `AdminDlqController`
+- 客户端错误必须各有对应的 handler，否则一律落进兜底返回 500：约束不满足
+  （`HandlerMethodValidationException`）、类型转换失败（`MethodArgumentTypeMismatchException`，
+  如 `?count=abc`）、缺参数（`MissingServletRequestParameterException`）、
+  HTTP 方法不对（`HttpRequestMethodNotSupportedException`，如用 GET 打 POST 接口）
 
 ## 六、建表 SQL
 

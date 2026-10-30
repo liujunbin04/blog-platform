@@ -55,7 +55,7 @@ public class RedisCacheConfig {
         GenericJackson2JsonRedisSerializer valueSerializer = new GenericJackson2JsonRedisSerializer(mapper);
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
-                // 默认过期时间 1 小时
+                // 默认过期时间 10 分钟（一致性主要靠写操作时的 @CacheEvict 主动失效，TTL 只是兜底）
                 .entryTtl(Duration.ofMinutes(10))
                 // key 前缀：缓存名 probe 的 key 形如 blog:cache:probe::1，避免与其他业务 key 冲突
                 .prefixCacheNameWith("blog:cache:")

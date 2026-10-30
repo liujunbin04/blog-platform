@@ -3,6 +3,7 @@ package com.example.blog.common;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.MessageSourceResolvable;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.validation.BindException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -10,6 +11,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.util.Objects;
@@ -64,6 +66,25 @@ public class GlobalExceptionHandler {
                 .findFirst()
                 .orElse("参数校验失败");
         return Result.error(400, message);
+    }
+
+    /**
+     * 请求参数类型不匹配（如 {@code ?count=abc} 传给 int）
+     * <p>不补这条会落进兜底 handler 返回 500「系统繁忙」——参数格式错误是客户端问题，
+     * 应该是 400 并指出是哪个参数</p>
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public Result<Void> handleMethodArgumentTypeMismatchException(MethodArgumentTypeMismatchException e) {
+        return Result.error(400, "参数类型错误: " + e.getName());
+    }
+
+    /**
+     * 接口存在但不支持该 HTTP 方法（如用 GET 打 POST 接口）
+     * <p>这同样是客户端错误，落到兜底会返回 500，掩盖真正的原因</p>
+     */
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public Result<Void> handleHttpRequestMethodNotSupportedException(HttpRequestMethodNotSupportedException e) {
+        return Result.error(405, "不支持的请求方法: " + e.getMethod());
     }
 
     /**

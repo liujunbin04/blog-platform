@@ -22,10 +22,10 @@ import java.util.List;
  * 死信队列管理（运维用）
  * <p>权限：按 {@code app.admin.usernames} 白名单校验登录名。项目没有角色体系，
  * 这里不引入一套只服务于两个端点的权限模型。</p>
- * <p>刻意<b>不加</b> {@code @Validated}：那会启用方法级校验并抛出
- * {@code ConstraintViolationException}，而全局异常处理器只覆盖了
- * {@code HandlerMethodValidationException}（Spring 6.1+ 对控制器参数的内建校验），
- * 结果就是 count 超限时返回 500 而不是带提示的 400。</p>
+ * <p>刻意<b>不加</b> {@code @Validated}：Spring 6.1+ 已对控制器方法参数做内建校验，
+ * 校验失败抛 {@code HandlerMethodValidationException}，全局异常处理器会转成带提示的 400。
+ * 加上 {@code @Validated} 会改成走方法级校验、抛 {@code ConstraintViolationException}，
+ * 那条异常没人处理，结果是 count 超限时返回 500。两个注解只留一个，这里选不加。</p>
  */
 @RestController
 @RequestMapping("/api/admin/dlq")
