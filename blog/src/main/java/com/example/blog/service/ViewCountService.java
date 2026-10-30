@@ -1,7 +1,5 @@
 package com.example.blog.service;
 
-import java.util.Map;
-
 /**
  * 文章浏览量计数（Redis 累加 + 定时回写 MySQL）
  * <p>
@@ -27,11 +25,6 @@ public interface ViewCountService {
      * @return 自增后的浏览量
      */
     long incrementAndGet(Long articleId, int dbBaseline);
-
-    /**
-     * 当前 Redis 实时浏览量的只读快照。
-     */
-    Map<Long, Long> snapshot();
 
     /**
      * 把 Redis 中累积的浏览量批量回写 MySQL

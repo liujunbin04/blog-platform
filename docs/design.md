@@ -37,7 +37,8 @@
 
 ### 2.6 热门文章缓存
 - Redis ZSET `hot:articles`（member=article_id，score=hot_score），定时任务每 10 分钟重建，首页热门榜直接读缓存
-- 文章详情/列表短 TTL 缓存；防穿透（空值缓存）、防击穿（热点 key 逻辑过期 + 互斥锁）、防雪崩（TTL 随机化）
+- 文章详情缓存（Spring Cache，key=`article::{id}`，TTL 10 分钟，只缓存公开文章）
+- 防穿透（不缓存 null）、防击穿（缓存未命中时用 Redisson 分布式锁串行化回源）；雪崩由 key 按文章 id 天然分散来规避，未做额外的 TTL 随机化
 
 ### 2.7 评论/点赞异步通知
 - 评论、点赞事件投递 RabbitMQ（Exchange `blog.event` → Queue `blog.notify`）
@@ -197,9 +198,11 @@ hot_score = view_count × 1 + like_count × 5 + comment_count × 10 + favorite_c
 | Key | 类型 | 说明 |
 |---|---|---|
 | hot:articles | ZSET | 热门榜（score=hot_score，定时重建） |
+| hot:articles:building | ZSET | 重建中的临时 key，构建完成后 rename 覆盖 |
 | article:view:{id} | INCR | 浏览量计数 |
-| article:cache:{id} | String | 文章详情缓存，TTL 10min + 随机 |
-| article:page:{sort}:{page} | String | 列表页缓存，短 TTL |
+| blog:cache:article::{id} | String | 文章详情缓存（Spring Cache），TTL 10min |
+| lock:article::{id} | String | 防击穿互斥锁（Redisson） |
+| hot:dedup:{eventKey} | String | 热度加分事件去重，TTL 2h |
 
 ### 5.5 MQ 约定
 - Exchange `blog.event`（direct）→ Queue `blog.notify`，routing key：`notify.comment` / `notify.like`

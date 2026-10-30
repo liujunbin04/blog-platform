@@ -29,7 +29,7 @@ public class RedisCacheConfig {
     /**
      * Redis 缓存管理器
      * <ul>
-     *   <li>默认过期 1 小时（单个缓存可用 withCacheConfiguration 覆盖）</li>
+     *   <li>默认过期 10 分钟（单个缓存可用 withCacheConfiguration 覆盖）</li>
      *   <li>值用 Jackson JSON 序列化（Generic 版会写入类型信息，反序列化恢复原类型）</li>
      *   <li>key 用 StringRedisSerializer，统一加 blog:cache: 前缀</li>
      *   <li>不缓存 null，防止缓存穿透</li>

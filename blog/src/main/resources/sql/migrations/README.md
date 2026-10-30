@@ -7,11 +7,12 @@
 ## 手动执行
 
 ```powershell
+# 密码取自仓库根目录 .env 的 MYSQL_ROOT_PASSWORD（本地开发默认 123456）
 Get-Content -Raw .\migration-2026-08-26.sql |
-  docker compose exec -T mysql mysql -uroot -pblog_dev_pwd blog
+  docker compose exec -T mysql mysql -uroot -p123456 blog
 
 Get-Content -Raw .\migration-2026-08-28.sql |
-  docker compose exec -T mysql mysql -uroot -pblog_dev_pwd blog
+  docker compose exec -T mysql mysql -uroot -p123456 blog
 ```
 
 若本地数据可以删除，优先使用全新初始化：
