@@ -10,3 +10,6 @@
 
 # 数据迁移时临时导出的 SQL（可能含真实数据）
 blog_data.sql
+
+# 本地 Maven 用户目录（MAVEN_USER_HOME 指向此处，含下载的 Maven 发行包与依赖缓存）
+.mvn-home/
