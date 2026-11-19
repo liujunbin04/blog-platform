@@ -1,7 +1,7 @@
 # 构建与运行手册
 
 配套文件：`docker-compose.yml`、`blog/Dockerfile`、`frontend/Dockerfile`
-设计说明见 `docs/superpowers/plans/2026-08-29-dockerization.md`
+编排设计说明见 `docker-compose.yml` 中的注释
 
 > 本手册记录的配置已于 2026-08-29 在本机**完整跑通**：六个服务全部 healthy，
 > 前端、后端直连、Nginx 反代、SPA 深链接、中文全文搜索均已验证。
